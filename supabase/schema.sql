@@ -8,9 +8,15 @@ create extension if not exists pgcrypto;
 create table if not exists public.institutes (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  institute_type text not null default 'coaching',
+  metadata jsonb not null default '{}'::jsonb,
   owner_id uuid not null references auth.users(id) on delete cascade,
   created_at timestamptz not null default now()
 );
+
+-- Backward-compatible additions for projects created with the earlier schema.
+alter table public.institutes add column if not exists institute_type text not null default 'coaching';
+alter table public.institutes add column if not exists metadata jsonb not null default '{}'::jsonb;
 
 create table if not exists public.institute_members (
   id uuid primary key default gen_random_uuid(),
