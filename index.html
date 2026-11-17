@@ -1076,6 +1076,7 @@ async function renderUsers(){
     <tr><td><b>Staff</b></td><td>Routine ও Attendance (শুধু দেখা)</td></tr>
    </tbody></table></div>
   </div>
+  <div class="panel" style="margin-bottom:15px"><div class="panel-head"><div><h3>${t("Pending Staff Invitations","Pending Staff Invitations")}</h3><div class="smalltext">সর্বশেষ ১০০টি invitation ও তাদের অবস্থা</div></div><button class="btn secondary small" onclick="loadStaffInvitations()">↻ Refresh</button></div><div id="staffInvitations" class="empty">লোড হচ্ছে…</div><div class="notice" style="margin-top:12px">এই ধাপে invitation তালিকা ও revoke সুবিধা চালু। Email/SMS পাঠানো এবং নতুন invitation তৈরি করার server-side delivery ব্যবস্থা এখনো যুক্ত হয়নি।</div></div>
   <div class="panel"><div class="panel-head"><h3>${t("প্রতিষ্ঠানের সদস্য তালিকা","Institute Members")}</h3><button class="btn secondary small" onclick="renderUsers()">↻ Refresh</button></div><div id="staffRoster" class="empty">লোড হচ্ছে…</div></div>`;
  if(!cloud){$("staffRoster").innerHTML='<div class="notice">Cloud login ছাড়া Staff Management ব্যবহার করা যাবে না।</div>';return;}
  try{
@@ -1089,6 +1090,39 @@ async function renderUsers(){
    return `<tr><td><b>${esc(m.email||"Email unavailable")}</b><small class="muted" style="display:block">${m.user_id===user.id?"আপনি":" "}</small></td><td>${esc(m.phone||"—")}</td><td>${roleControl}</td><td>${esc(m.created_at?new Date(m.created_at).toLocaleDateString():"—")}</td><td>${canEdit?`<button class="btn danger small" onclick="removeStaff('${esc(m.user_id)}','${esc(m.email||"staff")}')">Remove</button>`:"—"}</td></tr>`;
   }).join("")}</tbody></table></div>`:'<div class="empty">কোনো সদস্য পাওয়া যায়নি।</div>';
  }catch(e){$("staffRoster").innerHTML='<div class="notice">Staff list load failed: '+esc(e.message||e)+'</div>';}
+ loadStaffInvitations();
+}
+async function loadStaffInvitations(){
+ const root=$("staffInvitations");
+ if(!root)return;
+ if(!cloud){root.innerHTML='<div class="notice">Cloud login ছাড়া Invitation Management ব্যবহার করা যাবে না।</div>';return;}
+ root.innerHTML='<div class="empty">লোড হচ্ছে…</div>';
+ try{
+  const r=await sb.rpc("get_coachingos_staff_invitations",{_institute_id:activeInstitute});
+  if(r.error)throw r.error;
+  const invites=r.data||[];
+  if(!invites.length){root.innerHTML='<div class="empty">এখনো কোনো Staff Invitation নেই।</div>';return;}
+  const canRevoke=activeRole==="owner"||activeRole==="admin";
+  const statusLabel={pending:"Pending",accepted:"Accepted",revoked:"Revoked",expired:"Expired"};
+  const statusClass={pending:"amber",accepted:"green",revoked:"red",expired:"red"};
+  root.innerHTML=invites.map(inv=>{
+   const contact=inv.email||inv.phone||"—";
+   const status=inv.status||"pending";
+   const action=canRevoke&&status==="pending"?'<button class="btn danger small" onclick="revokeStaffInvitation(\''+esc(inv.id)+'\')">Revoke</button>':"—";
+   return '<div class="panel" style="margin:8px 0;padding:12px"><b>'+esc(contact)+'</b> · '+esc(staffRoleLabel(inv.role))+' · <span class="tag '+(statusClass[status]||"")+'">'+(statusLabel[status]||esc(status))+'</span><div class="smalltext">Created: '+esc(inv.created_at?new Date(inv.created_at).toLocaleString():"—")+' · Expires: '+esc(inv.expires_at?new Date(inv.expires_at).toLocaleString():"—")+'</div><div style="margin-top:8px">'+action+'</div></div>';
+  }).join("");
+ }catch(e){root.innerHTML='<div class="notice">Invitation list load failed: '+esc(e.message||e)+'</div>';}
+}
+async function revokeStaffInvitation(invitationId){
+ if(activeRole!=="owner"&&activeRole!=="admin")return toast("শুধু Owner/Admin invitation revoke করতে পারবেন");
+ if(!confirm("এই Staff Invitation revoke করবেন?"))return;
+ try{
+  const r=await sb.rpc("admin_revoke_coachingos_staff_invitation",{_institute_id:activeInstitute,_invitation_id:invitationId});
+  if(r.error)throw r.error;
+  if(!r.data)return toast("Invitation pending নেই বা ইতিমধ্যে পরিবর্তিত হয়েছে");
+  toast("Invitation revoke হয়েছে");
+  await loadStaffInvitations();
+ }catch(e){toast("Invitation revoke failed: "+(e.message||e));}
 }
 function openStaffForm(){
  if(!canManageStaff())return toast("শুধু Owner/Admin স্টাফ যোগ করতে পারবেন");
