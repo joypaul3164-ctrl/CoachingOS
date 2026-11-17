@@ -164,6 +164,7 @@ const TABLE = "coachingos_records";
 const $ = id => document.getElementById(id);
 let sb=null,user=null,cloud=false,lang="bn",currentPage="dashboard";
 let activeInstitute="",institutes=[],activeRole="owner",rows={},editingId=null;
+const INSTITUTE_TYPES=[["government","সরকারি প্রতিষ্ঠান"],["private","বেসরকারি প্রতিষ্ঠান"],["school","স্কুল"],["college","কলেজ"],["university","বিশ্ববিদ্যালয়"],["madrasa","মাদ্রাসা"],["coaching","কোচিং সেন্টার"],["training","ট্রেনিং / প্রশিক্ষণ কেন্দ্র"],["ngo","এনজিও / অলাভজনক সংস্থা"],["healthcare","হাসপাতাল / ক্লিনিক"],["business","ব্যবসা প্রতিষ্ঠান"],["other","অন্যান্য"]];
 
 const modules={
  students:{title:"শিক্ষার্থী",en:"Students",icon:"♙",fields:[
@@ -398,17 +399,32 @@ async function loadAll(){
 async function afterAuth(){
  if(!user)return;
  try{const m=await sb.from("institute_members").select("institute_id,role").eq("user_id",user.id);if(m.error)throw m.error;institutes=[];
- for(const x of (m.data||[])){const q=await sb.from("institutes").select("id,name").eq("id",x.institute_id).maybeSingle();if(q.error)throw q.error;if(q.data)institutes.push(q.data);}
- if(!institutes.length){const q=await sb.from("institutes").insert({name:(user.email||"My")+" Institute",owner_id:user.id}).select("id,name").single();if(q.error)throw q.error;const a=await sb.from("institute_members").insert({institute_id:q.data.id,user_id:user.id,role:"owner"});if(a.error)throw a.error;institutes=[q.data];activeRole="owner";}else activeRole=m.data[0].role||"owner";
+ for(const x of (m.data||[])){const q=await sb.from("institutes").select("id,name,institute_type,metadata").eq("id",x.institute_id).maybeSingle();if(q.error)throw q.error;if(q.data)institutes.push(q.data);}
+ if(!institutes.length){const q=await sb.from("institutes").insert({name:(user.email||"My")+" Institute",owner_id:user.id,institute_type:"coaching"}).select("id,name,institute_type,metadata").single();if(q.error)throw q.error;const a=await sb.from("institute_members").insert({institute_id:q.data.id,user_id:user.id,role:"owner"});if(a.error)throw a.error;institutes=[q.data];activeRole="owner";}else activeRole=m.data[0].role||"owner";
  if(!institutes.some(x=>x.id===activeInstitute))activeInstitute=institutes[0].id;await loadAll();showApp();}
  catch(e){toast("Account setup error: "+(e.message||e));}
 }
 async function switchInstitute(id){
  if(!institutes.some(x=>x.id===id))return;activeInstitute=id;const r=await sb.from("institute_members").select("role").eq("institute_id",id).eq("user_id",user.id).maybeSingle();if(!r.error)activeRole=r.data?.role||"owner";try{await loadAll();showApp();}catch(e){toast("Load error: "+e.message);}
 }
-async function addInstitute(){
- const name=prompt("নতুন প্রতিষ্ঠানের নাম লিখুন");if(!name?.trim())return;try{const r=await sb.from("institutes").insert({name:name.trim(),owner_id:user.id}).select("id,name").single();if(r.error)throw r.error;const m=await sb.from("institute_members").insert({institute_id:r.data.id,user_id:user.id,role:"owner"});if(m.error)throw m.error;institutes.push(r.data);activeInstitute=r.data.id;activeRole="owner";await loadAll();showApp();}catch(e){toast("Institute error: "+e.message);}
+function addInstitute(){
+ if(!cloud||!user)return toast("প্রতিষ্ঠান যোগ করতে Cloud login প্রয়োজন");
+ const options=INSTITUTE_TYPES.map(function(x){return '<option value="'+x[0]+'">'+x[1]+'</option>';}).join("");
+ $("modalRoot").innerHTML='<div class="modal-back" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="panel-head"><h3>＋ নতুন প্রতিষ্ঠান যোগ করুন</h3><button class="btn ghost small" onclick="closeModal()">✕</button></div><form onsubmit="submitInstitute(event)"><div class="form-grid"><div class="field wide"><label>প্রতিষ্ঠানের পূর্ণ নাম *</label><input id="newInstituteName" maxlength="140" required placeholder="প্রতিষ্ঠানের নাম লিখুন"></div><div class="field"><label>প্রতিষ্ঠানের ধরন *</label><select id="newInstituteType" required>'+options+'</select></div><div class="field"><label>যোগাযোগের ইমেইল (ঐচ্ছিক)</label><input id="newInstituteEmail" type="email" maxlength="180" placeholder="office@example.com"></div><div class="field wide"><label>ঠিকানা (ঐচ্ছিক)</label><input id="newInstituteAddress" maxlength="240" placeholder="প্রতিষ্ঠানের ঠিকানা"></div></div><div class="notice" style="margin-top:14px">প্রতিষ্ঠানের ধরন অনুযায়ী পরবর্তীতে আলাদা মডিউল ও অনুমতি সাজানো হবে। সরকারি পরিচয় বা অনুমোদন প্রয়োজন হলে তা আলাদাভাবে যাচাই করতে হবে।</div><div class="form-actions"><button type="button" class="btn ghost" onclick="closeModal()">বাতিল</button><button class="btn" type="submit">প্রতিষ্ঠান তৈরি করুন</button></div></form></div></div>';
 }
+async function submitInstitute(event){
+ event.preventDefault();if(!cloud||!user)return toast("Cloud login প্রয়োজন");
+ const name=$("newInstituteName").value.trim(),type=$("newInstituteType").value;
+ if(!name)return toast("প্রতিষ্ঠানের নাম লিখুন");
+ if(!INSTITUTE_TYPES.some(function(x){return x[0]===type;}))return toast("সঠিক প্রতিষ্ঠানের ধরন নির্বাচন করুন");
+ const metadata={contact_email:$("newInstituteEmail").value.trim(),address:$("newInstituteAddress").value.trim()};
+ try{
+  const r=await sb.from("institutes").insert({name:name,owner_id:user.id,institute_type:type,metadata:metadata}).select("id,name,institute_type,metadata").single();if(r.error)throw r.error;
+  const m=await sb.from("institute_members").insert({institute_id:r.data.id,user_id:user.id,role:"owner"});if(m.error)throw m.error;
+  institutes.push(r.data);activeInstitute=r.data.id;activeRole="owner";closeModal();await loadAll();showApp();toast("নতুন প্রতিষ্ঠান তৈরি হয়েছে");
+ }catch(e){toast("Institute error: "+(e.message||e));}
+}
+
 async function signOut(){if(sb)await sb.auth.signOut();user=null;activeInstitute="";institutes=[];rows={};$("appView").classList.add("hidden");$("loginView").classList.remove("hidden");}
 
 async function saveRecord(module,data,id=null){
@@ -479,7 +495,7 @@ function showApp(){
  $("connectionState").textContent=cloud?"CLOUD":"LOCAL MODE";
 
  $("instituteSelect").innerHTML=institutes.map(i=>
-  `<option value="${esc(i.id)}" ${i.id===activeInstitute?"selected":""}>${esc(i.name)}</option>`
+  `<option value="${esc(i.id)}" ${i.id===activeInstitute?"selected":""}>${esc(i.name)}${i.institute_type?" — "+esc(INSTITUTE_TYPES.find(x=>x[0]===i.institute_type)?.[1]||i.institute_type):""}</option>`
  ).join("");
 
  $("instituteSelect").classList.toggle("hidden",institutes.length===0);
@@ -785,6 +801,7 @@ function renderSettings(){
   <h3>${t("সংযোগের অবস্থা","Connection Status")}</h3>
   <p>${cloud?"☁ Supabase Cloud":"Local browser storage"}</p>
   <p class="smalltext">${t("প্রতিষ্ঠান","Institute")}: ${esc(institutes.find(x=>x.id===activeInstitute)?.name||"Local")}</p>
+  <p class="smalltext">ধরন: ${esc(INSTITUTE_TYPES.find(x=>x[0]===institutes.find(x=>x.id===activeInstitute)?.institute_type)?.[1]||"নির্ধারিত নয়")}</p>
   <p class="smalltext">${t("লগইন ইমেইল","Login email")}: ${esc(user?.email||"Local user")}</p>
   <p class="smalltext">${t("ভূমিকা","Role")}: ${esc(activeRole)}</p>
  </div>
