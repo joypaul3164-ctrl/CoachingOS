@@ -28,7 +28,7 @@ as $
         or (m.role = 'staff' and _record_type in ('routine','attendance'))
       )
   );
-$;
+$$;
 
 revoke all on function public.can_view_coachingos_records(uuid,text) from public;
 grant execute on function public.can_view_coachingos_records(uuid,text) to authenticated;
