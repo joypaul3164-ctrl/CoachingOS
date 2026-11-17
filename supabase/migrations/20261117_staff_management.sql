@@ -25,6 +25,7 @@ as $
         or (m.role = 'teacher' and _record_type in ('batches','routine','attendance','exams'))
         or (m.role = 'accountant' and _record_type in ('fees','expenses'))
         or (m.role = 'receptionist' and _record_type in ('students','attendance','fees'))
+        or (m.role = 'staff' and _record_type in ('routine','attendance'))
       )
   );
 $;
