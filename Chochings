@@ -342,9 +342,51 @@ async function signUp(){
   }
 
   user=r.data.user;
-  await afterAutfunction canWrite(){
- return activeRole==="owner"||activeRole==="admin"||activeRole==="manager";
+  await afterAuth();
+ }catch(e){toast("Sign up error: "+(e.message||e));}
+ finally{$("signupBtn").disabled=false;}
 }
+
+async function signIn(){
+ try{const email=$("email").value.trim(),password=$("password").value;if(!email||!password)return toast("Email ও Password লিখুন");if(!sb&&!(await initCloud()))return;
+ const r=await sb.auth.signInWithPassword({email,password});if(r.error)return toast("Login failed: "+r.error.message);user=r.data.user;await afterAuth();}
+ catch(e){toast("Login error: "+(e.message||e));}
+}
+async function resetPassword(){
+ const email=$("email").value.trim();if(!email||!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return toast("আগে সঠিক Email address লিখুন");if(!sb&&!(await initCloud()))return;
+ try{const r=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});if(r.error)return toast("Reset error: "+r.error.message);toast("Password reset link Email-এ পাঠানো হয়েছে");}
+ catch(e){toast("Reset error: "+(e.message||e));}
+}
+function showRecoveryForm(){
+ const card=document.querySelector(".login-card");if(!card||$("recoveryForm"))return;const f=document.createElement("div");f.id="recoveryForm";
+ f.innerHTML='<h3>নতুন Password সেট করুন</h3><div class="field"><label>New Password</label><input id="newPassword" type="password" minlength="6"></div><div class="field"><label>Confirm Password</label><input id="confirmPassword" type="password" minlength="6"></div><button class="btn fullbtn" onclick="updateRecoveredPassword()">Update Password</button>';card.appendChild(f);
+}
+async function updateRecoveredPassword(){
+ const p=$("newPassword")?.value||"",q=$("confirmPassword")?.value||"";if(p.length<6)return toast("Password কমপক্ষে ৬ অক্ষরের হতে হবে");if(p!==q)return toast("দুটি Password মিলছে না");
+ try{const r=await sb.auth.updateUser({password:p});if(r.error)return toast(r.error.message);$("recoveryForm")?.remove();await sb.auth.signOut();toast("Password আপডেট হয়েছে। এখন Sign In করুন।");}catch(e){toast("Password update error: "+e.message);}
+}
+function canWrite(){return activeRole==="owner"||activeRole==="admin"||activeRole==="manager";}
+function saveLocal(){try{localStorage.setItem("coachingos_"+(activeInstitute||"default"),JSON.stringify({rows,activeInstitute,activeRole}));}catch(e){toast("Local save error: "+e.message);}}
+async function loadAll(){
+ if(!activeInstitute)return;Object.keys(modules).forEach(k=>rows[k]=[]);
+ const r=await sb.from(TABLE).select("*").eq("institute_id",activeInstitute);if(r.error)throw r.error;
+ (r.data||[]).forEach(x=>{const k=x.record_type||x.module,d=x.record_data||x.data||{};if(rows[k])rows[k].push({...d,id:x.id,_created_at:x.created_at});});
+}
+async function afterAuth(){
+ if(!user)return;
+ try{const m=await sb.from("institute_members").select("institute_id,role").eq("user_id",user.id);if(m.error)throw m.error;institutes=[];
+ for(const x of (m.data||[])){const q=await sb.from("institutes").select("id,name").eq("id",x.institute_id).maybeSingle();if(q.error)throw q.error;if(q.data)institutes.push(q.data);}
+ if(!institutes.length){const q=await sb.from("institutes").insert({name:(user.email||"My")+" Institute",owner_id:user.id}).select("id,name").single();if(q.error)throw q.error;const a=await sb.from("institute_members").insert({institute_id:q.data.id,user_id:user.id,role:"owner"});if(a.error)throw a.error;institutes=[q.data];activeRole="owner";}else activeRole=m.data[0].role||"owner";
+ if(!institutes.some(x=>x.id===activeInstitute))activeInstitute=institutes[0].id;await loadAll();showApp();}
+ catch(e){toast("Account setup error: "+(e.message||e));}
+}
+async function switchInstitute(id){
+ if(!institutes.some(x=>x.id===id))return;activeInstitute=id;const r=await sb.from("institute_members").select("role").eq("institute_id",id).eq("user_id",user.id).maybeSingle();if(!r.error)activeRole=r.data?.role||"owner";try{await loadAll();showApp();}catch(e){toast("Load error: "+e.message);}
+}
+async function addInstitute(){
+ const name=prompt("নতুন প্রতিষ্ঠানের নাম লিখুন");if(!name?.trim())return;try{const r=await sb.from("institutes").insert({name:name.trim(),owner_id:user.id}).select("id,name").single();if(r.error)throw r.error;const m=await sb.from("institute_members").insert({institute_id:r.data.id,user_id:user.id,role:"owner"});if(m.error)throw m.error;institutes.push(r.data);activeInstitute=r.data.id;activeRole="owner";await loadAll();showApp();}catch(e){toast("Institute error: "+e.message);}
+}
+async function signOut(){if(sb)await sb.auth.signOut();user=null;activeInstitute="";institutes=[];rows={};$("appView").classList.add("hidden");$("loginView").classList.remove("hidden");}
 
 async function saveRecord(module,data,id=null){
  try{
@@ -847,22 +889,13 @@ async function boot(){
    return;
   }
 
-  if(session.data.session){
-   user=session.data.session.user;
-   await afterAuth();
-  }
-
-  sb.auth.onAuthStateChange(async(event,session)=>{
-   if(event==="SIGNED_IN"&&session?.user){
-    user=session.user;
-    await afterAuth();
-   }
-   if(event==="SIGNED_OUT"){
-    user=null;
-    $("appView").classList.add("hidden");
-    $("loginView").classList.remove("hidden");
-   }
+  sb.auth.onAuthStateChange((event,session)=>{
+   if(event==="PASSWORD_RECOVERY")showRecoveryForm();
+   else if(event==="SIGNED_IN"&&session?.user){user=session.user;Promise.resolve().then(()=>afterAuth());}
+   else if(event==="SIGNED_OUT"){user=null;$("appView").classList.add("hidden");$("loginView").classList.remove("hidden");}
   });
+  if(session.data.session){user=session.data.session.user;await afterAuth();}
+  if(window.location.hash.includes("type=recovery"))showRecoveryForm();
 
  }catch(e){
   toast("Startup error: "+(e.message||e));
