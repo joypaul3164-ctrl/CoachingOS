@@ -1082,26 +1082,26 @@ async function renderUsers(){
   const r=await sb.rpc("get_coachingos_institute_members",{_institute_id:activeInstitute});
   if(r.error)throw r.error;
   const members=r.data||[];
-  $("staffRoster").innerHTML=members.length?`<div class="table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>যোগদান</th><th>Action</th></tr></thead><tbody>${members.map(m=>{
+  $("staffRoster").innerHTML=members.length?`<div class="table-wrap"><table><thead><tr><th>Email</th><th>Phone</th><th>Role</th><th>যোগদান</th><th>Action</th></tr></thead><tbody>${members.map(m=>{
    const canEdit=manage&&m.role!=="owner"&&(activeRole==="owner"||(activeRole==="admin"&&m.role!=="admin"));
    const roleOptions=(activeRole==="owner"?["admin","manager","teacher","accountant","receptionist","staff"]:["manager","teacher","accountant","receptionist","staff"]);
    const roleControl=canEdit?`<select aria-label="Member role" onchange="updateStaffRole('${esc(m.user_id)}',this.value)">${roleOptions.map(role=>`<option value="${role}" ${m.role===role?"selected":""}>${staffRoleLabel(role)}</option>`).join("")}</select>`:`<span class="tag ${m.role==="owner"?"green":""}">${esc(staffRoleLabel(m.role))}</span>`;
-   return `<tr><td><b>${esc(m.email||"Email unavailable")}</b><small class="muted" style="display:block">${m.user_id===user.id?"আপনি":" "}</small></td><td>${roleControl}</td><td>${esc(m.created_at?new Date(m.created_at).toLocaleDateString():"—")}</td><td>${canEdit?`<button class="btn danger small" onclick="removeStaff('${esc(m.user_id)}','${esc(m.email||"staff")}')">Remove</button>`:"—"}</td></tr>`;
+   return `<tr><td><b>${esc(m.email||"Email unavailable")}</b><small class="muted" style="display:block">${m.user_id===user.id?"আপনি":" "}</small></td><td>${esc(m.phone||"—")}</td><td>${roleControl}</td><td>${esc(m.created_at?new Date(m.created_at).toLocaleDateString():"—")}</td><td>${canEdit?`<button class="btn danger small" onclick="removeStaff('${esc(m.user_id)}','${esc(m.email||"staff")}')">Remove</button>`:"—"}</td></tr>`;
   }).join("")}</tbody></table></div>`:'<div class="empty">কোনো সদস্য পাওয়া যায়নি।</div>';
  }catch(e){$("staffRoster").innerHTML='<div class="notice">Staff list load failed: '+esc(e.message||e)+'</div>';}
 }
 function openStaffForm(){
  if(!canManageStaff())return toast("শুধু Owner/Admin স্টাফ যোগ করতে পারবেন");
  const roles=activeRole==="owner"?["admin","manager","teacher","accountant","receptionist","staff"]:["manager","teacher","accountant","receptionist","staff"];
- $("modalRoot").innerHTML=`<div class="modal-back" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="panel-head"><h3>＋ নতুন Staff যোগ করুন</h3><button class="btn ghost small" onclick="closeModal()">✕</button></div>
- <form onsubmit="submitStaffForm(event)"><div class="form-grid"><div class="field wide"><label>Account Email *</label><input id="staffEmail" type="email" maxlength="180" required placeholder="যে ইমেইল দিয়ে CoachingOS-এ Sign Up করেছে"></div><div class="field wide"><label>Role *</label><select id="staffRole" required>${roles.map(role=>`<option value="${role}">${staffRoleLabel(role)}</option>`).join("")}</select></div></div>
- <div class="notice" style="margin-top:12px">এই ধাপে শুধু আগে থেকে CoachingOS-এ Account খোলা ইমেইল যোগ করা যাবে। নতুন ইমেইলে Invitation পাঠানোর ব্যবস্থা পরের ধাপে যুক্ত হবে।</div><div class="form-actions"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" type="submit">Add Staff</button></div></form></div></div>`;
+ $("modalRoot").innerHTML='<div class="modal-back" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="panel-head"><h3>＋ নতুন Staff যোগ করুন</h3><button class="btn ghost small" onclick="closeModal()">✕</button></div><form onsubmit="submitStaffForm(event)"><div class="form-grid"><div class="field"><label>Email Address</label><input id="staffEmail" type="email" maxlength="180" placeholder="staff@example.com"></div><div class="field"><label>Phone Number (E.164)</label><input id="staffPhone" type="tel" maxlength="16" pattern="[+][1-9][0-9]{7,14}" placeholder="+8801XXXXXXXXX"></div><div class="field wide"><label>Role *</label><select id="staffRole" required>'+roles.map(role=>'<option value="'+role+'">'+staffRoleLabel(role)+'</option>').join("")+'</select></div></div><div class="notice" style="margin-top:12px">Email অথবা verified phone number—অন্তত একটি দিন। দুটোই দিলে একই CoachingOS account-এর সঙ্গে মিলতে হবে। এই ধাপে আগে থেকে নিবন্ধিত account-কে সরাসরি Staff হিসেবে যোগ করা হবে; নতুন account-এ invitation delivery আলাদা server-side setup-এর পর চালু হবে।</div><div class="form-actions"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" type="submit">Add Staff</button></div></form></div></div>';
 }
 async function submitStaffForm(event){
  event.preventDefault();if(!canManageStaff())return toast("অনুমতি নেই");
- const email=$("staffEmail").value.trim(),role=$("staffRole").value;
+ const email=$("staffEmail").value.trim().toLowerCase(),phone=$("staffPhone").value.trim(),role=$("staffRole").value;
+ if(!email&&!phone)return toast("Email অথবা Phone Number দিন");
+ if(phone&&!/^[+][1-9][0-9]{7,14}$/.test(phone))return toast("Phone Number আন্তর্জাতিক format-এ দিন, যেমন +8801XXXXXXXXX");
  try{
-  const r=await sb.rpc("admin_add_coachingos_member",{_institute_id:activeInstitute,_email:email,_role:role});
+  const r=await sb.rpc("admin_add_coachingos_member_by_contact",{_institute_id:activeInstitute,_email:email||null,_phone:phone||null,_role:role});
   if(r.error)throw r.error;
   closeModal();toast("Staff সফলভাবে যোগ হয়েছে");await renderUsers();
  }catch(e){toast("Staff add failed: "+(e.message||e));}
