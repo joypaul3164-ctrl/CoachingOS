@@ -147,3 +147,107 @@ $$;
 
 revoke all on function public.get_coachingos_platform_overview() from public;
 grant execute on function public.get_coachingos_platform_overview() to authenticated;
+
+
+-- Enforce lifecycle status at the data boundary.
+-- Suspended/pending institutes retain their data, but ordinary members cannot
+-- read or modify institute records until a Platform Super Admin reactivates them.
+create or replace function public.guard_coachingos_institute_status()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.status is distinct from old.status
+     and not exists (
+       select 1 from public.platform_admins p
+       where p.user_id = (select auth.uid())
+     ) then
+    raise exception 'Only Platform Super Admin can change institute status'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists coachingos_guard_institute_status on public.institutes;
+create trigger coachingos_guard_institute_status
+before update of status on public.institutes
+for each row execute function public.guard_coachingos_institute_status();
+
+drop policy if exists "Institute members can read institute records" on public.coachingos_records;
+create policy "Active institute members can read institute records"
+on public.coachingos_records for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.institute_members m
+    join public.institutes i on i.id = m.institute_id
+    where m.institute_id = coachingos_records.institute_id
+      and m.user_id = (select auth.uid())
+      and i.status = 'active'
+  )
+);
+
+drop policy if exists "Institute admins can add records" on public.coachingos_records;
+create policy "Active institute admins can add records"
+on public.coachingos_records for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.institute_members m
+    join public.institutes i on i.id = m.institute_id
+    where m.institute_id = coachingos_records.institute_id
+      and m.user_id = (select auth.uid())
+      and m.role in ('owner', 'admin', 'manager')
+      and i.status = 'active'
+  )
+);
+
+drop policy if exists "Institute admins can update records" on public.coachingos_records;
+create policy "Active institute admins can update records"
+on public.coachingos_records for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.institute_members m
+    join public.institutes i on i.id = m.institute_id
+    where m.institute_id = coachingos_records.institute_id
+      and m.user_id = (select auth.uid())
+      and m.role in ('owner', 'admin', 'manager')
+      and i.status = 'active'
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.institute_members m
+    join public.institutes i on i.id = m.institute_id
+    where m.institute_id = coachingos_records.institute_id
+      and m.user_id = (select auth.uid())
+      and m.role in ('owner', 'admin', 'manager')
+      and i.status = 'active'
+  )
+);
+
+drop policy if exists "Institute admins can delete records" on public.coachingos_records;
+create policy "Active institute admins can delete records"
+on public.coachingos_records for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.institute_members m
+    join public.institutes i on i.id = m.institute_id
+    where m.institute_id = coachingos_records.institute_id
+      and m.user_id = (select auth.uid())
+      and m.role in ('owner', 'admin', 'manager')
+      and i.status = 'active'
+  )
+);
+
+revoke all on function public.guard_coachingos_institute_status() from public;
