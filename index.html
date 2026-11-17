@@ -447,6 +447,16 @@ tbody tr:hover{background:#f8faff}
  .panel{background:#fff}
 }
 
+
+.notification-count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:20px;background:#ff7187;color:#fff;font-size:10px;font-weight:900;margin-left:3px}
+.notification-list{display:grid;gap:9px}
+.notification-item{display:flex;gap:12px;align-items:flex-start;padding:13px;border:1px solid var(--line);border-radius:13px;background:rgba(255,255,255,.025)}
+.notification-item.unread{border-color:#168b9b;background:rgba(37,228,223,.07)}
+.notification-dot{width:9px;height:9px;border-radius:50%;background:#25e4df;flex:none;margin-top:6px}
+.notification-item.read .notification-dot{background:#536879}
+.notification-item p{margin:4px 0 5px;color:var(--muted);font-size:12px;white-space:normal}
+.notification-item small{color:var(--muted);font-size:10px}
+.notification-actions{display:flex;gap:7px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -493,7 +503,7 @@ tbody tr:hover{background:#f8faff}
  <main class="main">
   <header class="topbar">
    <div style="display:flex;align-items:center;gap:10px"><button class="btn ghost mobile-menu" onclick="$('sidebar').classList.toggle('open')">☰</button><div class="crumb" id="pageTitle">Dashboard</div></div>
-   <div class="top-actions"><select id="instituteSelect" class="branch-select" onchange="switchInstitute(this.value)" title="Institute"></select><button class="btn secondary small hidden" id="addInstituteTop" onclick="addInstitute()">＋ নতুন প্রতিষ্ঠান</button><span class="pill" id="connectionState">LOCAL MODE</span><button class="btn ghost small" onclick="toggleLanguage()" id="langBtn">বাংলা</button><div class="avatar" id="avatar">A</div><button class="btn ghost small" onclick="signOut()">Logout</button></div>
+   <div class="top-actions"><select id="instituteSelect" class="branch-select" onchange="switchInstitute(this.value)" title="Institute"></select><button class="btn ghost small hidden" id="notificationBell" onclick="openNotificationCenter()" title="Notifications">🔔 <span id="notificationCount" class="notification-count">0</span></button><button class="btn secondary small hidden" id="addInstituteTop" onclick="addInstitute()">＋ নতুন প্রতিষ্ঠান</button><span class="pill" id="connectionState">LOCAL MODE</span><button class="btn ghost small" onclick="toggleLanguage()" id="langBtn">বাংলা</button><div class="avatar" id="avatar">A</div><button class="btn ghost small" onclick="signOut()">Logout</button></div>
   </header>
   <div class="content" id="content"></div>
  </main>
@@ -875,6 +885,8 @@ function showApp(){
  $("instituteSelect").classList.toggle("hidden",institutes.length===0);
  $("platformNav")?.classList.toggle("hidden",!isPlatformAdmin);
  $("addInstituteTop").classList.toggle("hidden",!cloud||activeRole!=="owner");
+ $("notificationBell")?.classList.toggle("hidden",!cloud);
+ if(cloud)refreshNotificationBadge();
  render();
 }
 
@@ -914,6 +926,56 @@ function statCard(label,value,sub,icon){
  </div>`;
 }
 
+
+async function refreshNotificationBadge(){
+ const count=$("notificationCount");
+ if(!count||!cloud||!activeInstitute)return;
+ try{
+  const r=await sb.rpc("get_coachingos_unread_notification_count",{_institute_id:activeInstitute});
+  if(r.error)throw r.error;
+  const n=Number(r.data||0);
+  count.textContent=n>99?"99+":String(n);
+  count.style.display=n>0?"inline-grid":"none";
+ }catch(e){count.style.display="none";}
+}
+async function openNotificationCenter(){
+ if(!cloud)return toast("Cloud login প্রয়োজন");
+ $("modalRoot").innerHTML='<div class="modal-back" onclick="if(event.target===this)closeNotificationCenter()"><div class="modal" style="width:min(680px,100%)"><div class="panel-head"><div><h3>🔔 Notification Center</h3><div class="smalltext">এই প্রতিষ্ঠানের আপনার নোটিফিকেশন</div></div><button class="btn ghost small" onclick="closeNotificationCenter()">✕</button></div><div class="notification-actions" style="margin-bottom:12px"><button class="btn secondary small" onclick="loadNotificationCenter()">↻ Refresh</button><button class="btn good small" onclick="markAllNotificationsRead()">✓ Mark all as read</button></div><div id="notificationItems" class="notification-list"><div class="empty">লোড হচ্ছে…</div></div></div></div>';
+ await loadNotificationCenter();
+}
+function closeNotificationCenter(){ $("modalRoot").innerHTML=""; }
+async function loadNotificationCenter(){
+ const root=$("notificationItems");if(!root)return;
+ root.innerHTML='<div class="empty">লোড হচ্ছে…</div>';
+ try{
+  const r=await sb.rpc("get_coachingos_notifications",{_institute_id:activeInstitute});
+  if(r.error)throw r.error;
+  const list=r.data||[];
+  if(!list.length){root.innerHTML='<div class="empty">এখনো কোনো নোটিফিকেশন নেই।</div>';await refreshNotificationBadge();return;}
+  root.innerHTML=list.map(n=>{
+   const unread=!n.read_at;
+   const date=n.created_at?new Date(n.created_at).toLocaleString():"";
+   const title=esc(n.title||"Notification"),message=esc(n.message||"");
+   return '<div class="notification-item '+(unread?'unread':'read')+'"><span class="notification-dot"></span><div style="min-width:0;flex:1"><b>'+title+'</b><p>'+message+'</p><small>'+esc(date)+'</small></div>'+(unread?'<button class="btn secondary small" onclick="markNotificationRead(\''+esc(n.id)+'\')">Mark read</button>':'<span class="tag">Read</span>')+'</div>';
+  }).join("");
+  await refreshNotificationBadge();
+ }catch(e){root.innerHTML='<div class="notice">Notification load failed: '+esc(e.message||e)+'</div>';}
+}
+async function markNotificationRead(id){
+ try{
+  const r=await sb.rpc("mark_coachingos_notification_read",{_notification_id:id});
+  if(r.error)throw r.error;
+  await loadNotificationCenter();
+ }catch(e){toast("Read update failed: "+(e.message||e));}
+}
+async function markAllNotificationsRead(){
+ try{
+  const r=await sb.rpc("mark_all_coachingos_notifications_read",{_institute_id:activeInstitute});
+  if(r.error)throw r.error;
+  toast("সব নোটিফিকেশন read করা হয়েছে");
+  await loadNotificationCenter();
+ }catch(e){toast("Update failed: "+(e.message||e));}
+}
 
 async function setPlatformInstituteStatus(id,status){
  if(!isPlatformAdmin)return toast("অনুমতি নেই");
