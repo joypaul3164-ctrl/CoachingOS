@@ -3,6 +3,41 @@
 -- No passwords, service-role keys, or invitation tokens are exposed to the browser.
 -- Safe to rerun; existing memberships and records are preserved.
 
+create or replace function public.can_view_coachingos_records(
+  _institute_id uuid,
+  _record_type text
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $
+  select exists (
+    select 1
+    from public.institute_members m
+    join public.institutes i on i.id = m.institute_id
+    where m.institute_id = _institute_id
+      and m.user_id = (select auth.uid())
+      and i.status = 'active'
+      and (
+        m.role in ('owner','admin','manager')
+        or (m.role = 'teacher' and _record_type in ('batches','routine','attendance','exams'))
+        or (m.role = 'accountant' and _record_type in ('fees','expenses'))
+        or (m.role = 'receptionist' and _record_type in ('students','attendance','fees'))
+      )
+  );
+$;
+
+revoke all on function public.can_view_coachingos_records(uuid,text) from public;
+grant execute on function public.can_view_coachingos_records(uuid,text) to authenticated;
+
+drop policy if exists "Active institute members can read institute records" on public.coachingos_records;
+create policy "Role permitted members can read records"
+on public.coachingos_records for select
+to authenticated
+using (public.can_view_coachingos_records(institute_id, record_type));
+
 create or replace function public.can_manage_coachingos_records(
   _institute_id uuid,
   _record_type text
