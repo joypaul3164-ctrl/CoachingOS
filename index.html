@@ -738,7 +738,13 @@ async function updateRecoveredPassword(){
  const p=$("newPassword")?.value||"",q=$("confirmPassword")?.value||"";if(p.length<6)return toast("Password কমপক্ষে ৬ অক্ষরের হতে হবে");if(p!==q)return toast("দুটি Password মিলছে না");
  try{const r=await sb.auth.updateUser({password:p});if(r.error)return toast(r.error.message);$("recoveryForm")?.remove();await sb.auth.signOut();toast("Password আপডেট হয়েছে। এখন Sign In করুন।");}catch(e){toast("Password update error: "+e.message);}
 }
-function canWrite(){return activeRole==="owner"||activeRole==="admin"||activeRole==="manager";}
+function canWrite(module=null){
+ if(["owner","admin","manager"].includes(activeRole))return true;
+ const permissions={teacher:["batches","routine","attendance","exams"],accountant:["fees","expenses"],receptionist:["students","attendance","fees"],staff:[]};
+ return module?((permissions[activeRole]||[]).includes(module)):false;
+}
+function canManageStaff(){return activeRole==="owner"||activeRole==="admin";}
+function staffRoleLabel(role){return ({owner:"প্রতিষ্ঠান মালিক",admin:"Admin",manager:"Manager",teacher:"Teacher",accountant:"Accountant",receptionist:"Receptionist",staff:"Staff"})[role]||role;}
 function saveLocal(){try{localStorage.setItem("coachingos_"+(activeInstitute||"default"),JSON.stringify({rows,activeInstitute,activeRole}));}catch(e){toast("Local save error: "+e.message);}}
 async function loadAll(){
  if(!activeInstitute)return;Object.keys(modules).forEach(k=>rows[k]=[]);
@@ -781,7 +787,7 @@ async function signOut(){if(sb)await sb.auth.signOut();user=null;activeInstitute
 
 async function saveRecord(module,data,id=null){
  try{
-  if(!canWrite())return toast("আপনার এই কাজের অনুমতি নেই");
+  if(!canWrite(module))return toast("আপনার এই কাজের অনুমতি নেই");
 
   if(cloud){
    const payload={
@@ -820,7 +826,7 @@ async function saveRecord(module,data,id=null){
 }
 
 async function deleteRecord(module,id){
- if(!canWrite())return toast("আপনার অনুমতি নেই");
+ if(!canWrite(module))return toast("আপনার অনুমতি নেই");
  if(!confirm("আপনি কি এই তথ্যটি মুছে ফেলতে চান?"))return;
 
  try{
@@ -1047,6 +1053,77 @@ function renderDashboard(){
  </div>`;
 }
 
+
+async function renderUsers(){
+ const manage=canManageStaff();
+ $("content").innerHTML=`
+  <div class="welcome"><div><h1>${t("অ্যাডমিন ও স্টাফ","Admin & Staff")}</h1><div class="muted">${t("এই প্রতিষ্ঠানের সদস্য, দায়িত্ব ও ডেটা ব্যবহারের অনুমতি পরিচালনা করুন।","Manage this institute's members, roles and data permissions.")}</div></div>
+  ${manage?`<button class="btn" onclick="openStaffForm()">＋ ${t("স্টাফ যোগ করুন","Add Staff")}</button>`:""}</div>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-bottom:16px">
+   <div class="stat"><div class="label">Owner / Admin / Manager</div><div class="sub">সব মডিউল পরিচালনা</div></div>
+   <div class="stat"><div class="label">Teacher</div><div class="sub">Batch, Routine, Attendance, Exams</div></div>
+   <div class="stat"><div class="label">Accountant</div><div class="sub">Fees ও Expenses</div></div>
+   <div class="stat"><div class="label">Receptionist</div><div class="sub">Students, Attendance, Fees</div></div>
+  </div>
+  <div class="panel" style="margin-bottom:15px"><div class="panel-head"><h3>${t("Role ও Permission","Role & Permission")}</h3></div>
+   <div class="table-wrap"><table><thead><tr><th>Role</th><th>অনুমতি / Access</th></tr></thead><tbody>
+    <tr><td><b>Owner</b></td><td>সব মডিউল, স্টাফ ও Admin নিয়ন্ত্রণ</td></tr>
+    <tr><td><b>Admin</b></td><td>সব মডিউল; Admin নিয়োগ/অপসারণ শুধু Owner করতে পারবেন</td></tr>
+    <tr><td><b>Manager</b></td><td>সব মডিউল পরিচালনা; স্টাফ তালিকা দেখা</td></tr>
+    <tr><td><b>Teacher</b></td><td>Batch, Routine, Attendance, Exams</td></tr>
+    <tr><td><b>Accountant</b></td><td>Fees, Expenses</td></tr>
+    <tr><td><b>Receptionist</b></td><td>Students, Attendance, Fees</td></tr>
+    <tr><td><b>Staff</b></td><td>শুধু তথ্য দেখা</td></tr>
+   </tbody></table></div>
+  </div>
+  <div class="panel"><div class="panel-head"><h3>${t("প্রতিষ্ঠানের সদস্য তালিকা","Institute Members")}</h3><button class="btn secondary small" onclick="renderUsers()">↻ Refresh</button></div><div id="staffRoster" class="empty">লোড হচ্ছে…</div></div>`;
+ if(!cloud){$("staffRoster").innerHTML='<div class="notice">Cloud login ছাড়া Staff Management ব্যবহার করা যাবে না।</div>';return;}
+ try{
+  const r=await sb.rpc("get_coachingos_institute_members",{_institute_id:activeInstitute});
+  if(r.error)throw r.error;
+  const members=r.data||[];
+  $("staffRoster").innerHTML=members.length?`<div class="table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>যোগদান</th><th>Action</th></tr></thead><tbody>${members.map(m=>{
+   const canEdit=manage&&m.role!=="owner"&&(activeRole==="owner"||(activeRole==="admin"&&m.role!=="admin"));
+   const roleOptions=(activeRole==="owner"?["admin","manager","teacher","accountant","receptionist","staff"]:["manager","teacher","accountant","receptionist","staff"]);
+   const roleControl=canEdit?`<select aria-label="Member role" onchange="updateStaffRole('${esc(m.user_id)}',this.value)">${roleOptions.map(role=>`<option value="${role}" ${m.role===role?"selected":""}>${staffRoleLabel(role)}</option>`).join("")}</select>`:`<span class="tag ${m.role==="owner"?"green":""}">${esc(staffRoleLabel(m.role))}</span>`;
+   return `<tr><td><b>${esc(m.email||"Email unavailable")}</b><small class="muted" style="display:block">${m.user_id===user.id?"আপনি":" "}</small></td><td>${roleControl}</td><td>${esc(m.created_at?new Date(m.created_at).toLocaleDateString():"—")}</td><td>${canEdit?`<button class="btn danger small" onclick="removeStaff('${esc(m.user_id)}','${esc(m.email||"staff")}')">Remove</button>`:"—"}</td></tr>`;
+  }).join("")}</tbody></table></div>`:'<div class="empty">কোনো সদস্য পাওয়া যায়নি।</div>';
+ }catch(e){$("staffRoster").innerHTML='<div class="notice">Staff list load failed: '+esc(e.message||e)+'</div>';}
+}
+function openStaffForm(){
+ if(!canManageStaff())return toast("শুধু Owner/Admin স্টাফ যোগ করতে পারবেন");
+ const roles=activeRole==="owner"?["admin","manager","teacher","accountant","receptionist","staff"]:["manager","teacher","accountant","receptionist","staff"];
+ $("modalRoot").innerHTML=`<div class="modal-back" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="panel-head"><h3>＋ নতুন Staff যোগ করুন</h3><button class="btn ghost small" onclick="closeModal()">✕</button></div>
+ <form onsubmit="submitStaffForm(event)"><div class="form-grid"><div class="field wide"><label>Account Email *</label><input id="staffEmail" type="email" maxlength="180" required placeholder="যে ইমেইল দিয়ে CoachingOS-এ Sign Up করেছে"></div><div class="field wide"><label>Role *</label><select id="staffRole" required>${roles.map(role=>`<option value="${role}">${staffRoleLabel(role)}</option>`).join("")}</select></div></div>
+ <div class="notice" style="margin-top:12px">এই ধাপে শুধু আগে থেকে CoachingOS-এ Account খোলা ইমেইল যোগ করা যাবে। নতুন ইমেইলে Invitation পাঠানোর ব্যবস্থা পরের ধাপে যুক্ত হবে।</div><div class="form-actions"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" type="submit">Add Staff</button></div></form></div></div>`;
+}
+async function submitStaffForm(event){
+ event.preventDefault();if(!canManageStaff())return toast("অনুমতি নেই");
+ const email=$("staffEmail").value.trim(),role=$("staffRole").value;
+ try{
+  const r=await sb.rpc("admin_add_coachingos_member",{_institute_id:activeInstitute,_email:email,_role:role});
+  if(r.error)throw r.error;
+  closeModal();toast("Staff সফলভাবে যোগ হয়েছে");await renderUsers();
+ }catch(e){toast("Staff add failed: "+(e.message||e));}
+}
+async function updateStaffRole(userId,role){
+ if(!canManageStaff())return toast("অনুমতি নেই");
+ try{
+  const r=await sb.rpc("admin_update_coachingos_member_role",{_institute_id:activeInstitute,_user_id:userId,_role:role});
+  if(r.error)throw r.error;
+  toast("Role আপডেট হয়েছে");await renderUsers();
+ }catch(e){toast("Role update failed: "+(e.message||e));await renderUsers();}
+}
+async function removeStaff(userId,email){
+ if(!canManageStaff())return toast("অনুমতি নেই");
+ if(!confirm(email+"-কে এই প্রতিষ্ঠান থেকে Remove করবেন?"))return;
+ try{
+  const r=await sb.rpc("admin_remove_coachingos_member",{_institute_id:activeInstitute,_user_id:userId});
+  if(r.error)throw r.error;
+  toast("Staff সদস্য সরানো হয়েছে");await renderUsers();
+ }catch(e){toast("Remove failed: "+(e.message||e));}
+}
+
 function renderModule(module){
  const config=modules[module];
  if(!config)return;
@@ -1060,7 +1137,7 @@ function renderModule(module){
    <h1>${t(config.title,config.en)}</h1>
    <div class="muted">${t("তথ্য যোগ, সম্পাদনা ও ব্যবস্থাপনা করুন","Add, edit and manage records")}</div>
   </div>
-  ${canWrite()?`<button class="btn" onclick="openForm('${module}')">＋ ${t("নতুন যোগ করুন","Add New")}</button>`:""}
+  ${canWrite(module)?`<button class="btn" onclick="openForm('${module}')">＋ ${t("নতুন যোগ করুন","Add New")}</button>`:""}
  </div>
 
  <div class="panel">
@@ -1093,7 +1170,7 @@ function moduleTable(module,list){
      return `<td>${esc(val)}</td>`;
     }).join("")}
     <td>
-     ${canWrite()?`
+     ${canWrite(module)?`
       <button class="btn secondary small" onclick="openForm('${module}','${esc(x.id)}')">Edit</button>
       <button class="btn danger small" onclick="deleteRecord('${module}','${esc(x.id)}')">Delete</button>
      `:`<span class="muted">View</span>`}
@@ -1275,6 +1352,7 @@ function render(){
  ]));
 
  if(currentPage==="platform")return renderPlatformAdmin();
+ if(currentPage==="users")return renderUsers();
  if(currentPage==="dashboard")return renderDashboard();
  if(currentPage==="reports")return renderReports();
  if(currentPage==="settings")return renderSettings();
