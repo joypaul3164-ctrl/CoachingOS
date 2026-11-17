@@ -1111,6 +1111,8 @@ async function renderUsers(){
  loadStaffInvitations();
  loadStaffAuditLogs();
 }
+let staffAuditCache=[];
+const staffAuditLabels={member_added:"Staff added",member_role_changed:"Role changed",member_removed:"Staff removed",invitation_created:"Invitation created",invitation_accepted:"Invitation accepted",invitation_revoked:"Invitation revoked",invitation_expired:"Invitation expired"};
 async function loadStaffAuditLogs(){
  const root=$("staffAuditLogs");if(!root)return;
  if(!cloud){root.innerHTML='<div class="notice">Cloud login প্রয়োজন।</div>';return;}
@@ -1118,15 +1120,39 @@ async function loadStaffAuditLogs(){
  try{
   const r=await sb.rpc("get_coachingos_staff_audit_logs",{_institute_id:activeInstitute});
   if(r.error)throw r.error;
-  const logs=r.data||[];
-  const labels={member_added:"Staff added",member_role_changed:"Role changed",member_removed:"Staff removed",invitation_created:"Invitation created",invitation_accepted:"Invitation accepted",invitation_revoked:"Invitation revoked",invitation_expired:"Invitation expired"};
-  if(!logs.length){root.innerHTML='<div class="empty">এখনো কোনো Staff activity নেই।</div>';return;}
-  root.innerHTML='<div class="table-wrap"><table><thead><tr><th>Activity</th><th>Details</th><th>Time</th></tr></thead><tbody>'+logs.map(log=>{
-   const d=log.details||{};const detail=d.email||d.phone||((d.old_role||d.new_role)?((d.old_role||"—")+" → "+(d.new_role||"—")):(log.target_user_id?("User "+String(log.target_user_id).slice(0,8)):"—"));
-   return '<tr><td><b>'+esc(labels[log.event_type]||log.event_type)+'</b></td><td>'+esc(detail)+'</td><td>'+esc(log.created_at?new Date(log.created_at).toLocaleString():"—")+'</td></tr>';
-  }).join("")+'</tbody></table></div>';
+  staffAuditCache=r.data||[];
+  root.innerHTML='<div class="form-grid" style="margin-bottom:12px"><div class="field"><label>Search activity</label><input id="staffAuditSearch" placeholder="Email, phone, user ID or role" oninput="renderStaffAuditRows()"></div><div class="field"><label>Activity type</label><select id="staffAuditType" onchange="renderStaffAuditRows()"><option value="">All activities</option>'+Object.entries(staffAuditLabels).map(([k,v])=>'<option value="'+k+'">'+v+'</option>').join("")+'</select></div></div><div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn secondary small" onclick="exportStaffAuditLogs()">Export CSV</button></div><div id="staffAuditRows"></div>';
+  renderStaffAuditRows();
  }catch(e){root.innerHTML='<div class="notice">Audit log load failed: '+esc(e.message||e)+'</div>';}
 }
+function renderStaffAuditRows(){
+ const root=$("staffAuditRows");if(!root)return;
+ const query=($("staffAuditSearch")?.value||"").trim().toLowerCase();
+ const type=$("staffAuditType")?.value||"";
+ const filtered=staffAuditCache.filter(log=>{
+  if(type&&log.event_type!==type)return false;
+  const d=log.details||{};
+  const hay=[staffAuditLabels[log.event_type]||log.event_type,d.email,d.phone,d.old_role,d.new_role,log.target_user_id,log.actor_user_id].join(" ").toLowerCase();
+  return !query||hay.includes(query);
+ });
+ if(!filtered.length){root.innerHTML='<div class="empty">কোনো matching activity পাওয়া যায়নি।</div>';return;}
+ root.innerHTML='<div class="table-wrap"><table><thead><tr><th>Activity</th><th>Details</th><th>Time</th></tr></thead><tbody>'+filtered.map(log=>{
+  const d=log.details||{};const detail=d.email||d.phone||((d.old_role||d.new_role)?((d.old_role||"—")+" → "+(d.new_role||"—")):(log.target_user_id?("User "+String(log.target_user_id).slice(0,8)):"—"));
+  return '<tr><td><b>'+esc(staffAuditLabels[log.event_type]||log.event_type)+'</b></td><td>'+esc(detail)+'</td><td>'+esc(log.created_at?new Date(log.created_at).toLocaleString():"—")+'</td></tr>';
+ }).join("")+'</tbody></table></div><div class="smalltext" style="margin-top:8px">Showing '+filtered.length+' of '+staffAuditCache.length+' recent events (maximum 100).</div>';
+}
+function exportStaffAuditLogs(){
+ const rows=[["Activity","Details","Time","Actor User ID","Target User ID"]];
+ staffAuditCache.forEach(log=>{
+  const d=log.details||{};
+  const detail=d.email||d.phone||((d.old_role||d.new_role)?((d.old_role||"")+" -> "+(d.new_role||"")):"");
+  rows.push([staffAuditLabels[log.event_type]||log.event_type,detail,log.created_at||"",log.actor_user_id||"",log.target_user_id||""]);
+ });
+ const csv=rows.map(row=>row.map(value=>'"'+String(value??"").replace(/"/g,'""')+'"').join(",")).join("\\r\\n");
+ downloadText("CoachingOS_Staff_Audit_Log.csv",csv,"text/csv;charset=utf-8");
+ toast("Audit log CSV প্রস্তুত হয়েছে");
+}
+
 function openStaffInvitationForm(){
  if(!canManageStaff())return toast("শুধু Owner/Admin invitation তৈরি করতে পারবেন");
  const roles=activeRole==="owner"?["admin","manager","teacher","accountant","receptionist","staff"]:["manager","teacher","accountant","receptionist","staff"];
