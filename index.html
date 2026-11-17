@@ -230,6 +230,15 @@ tbody tr:hover{background:#f7f9ff}
 @media(prefers-reduced-motion:reduce){
  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
 }
+
+/* ===== Platform Super Admin Console ===== */
+.platform-hero{background:linear-gradient(120deg,#111d42,#263a78 62%,#176e78);color:#fff;border-radius:20px;padding:24px;margin-bottom:16px;box-shadow:0 18px 38px rgba(18,31,75,.18)}
+.platform-hero h1{margin:0 0 6px;font-size:25px}.platform-hero p{margin:0;color:#d6e2ff;font-size:12px}
+.platform-stat{background:linear-gradient(145deg,#fff,#f7f9ff)}
+.platform-table td{white-space:normal}.platform-table .tag{white-space:nowrap}
+.platform-kicker{font-size:10px;letter-spacing:1.3px;font-weight:900;color:#9fe9e4;margin-bottom:8px}
+@media(max-width:720px){.platform-hero{padding:18px}.platform-hero h1{font-size:21px}}
+
 </style>
 </head>
 <body>
@@ -265,6 +274,7 @@ tbody tr:hover{background:#f7f9ff}
    <button data-page="fees" onclick="go('fees')"><span class="ico">৳</span><span data-en="Fees & Payments" data-bn="বেতন ও পেমেন্ট">Fees & Payments</span></button>
    <button data-page="expenses" onclick="go('expenses')"><span class="ico">↗</span><span data-en="Expenses" data-bn="খরচ">Expenses</span></button>
    <button data-page="reports" onclick="go('reports')"><span class="ico">▥</span><span data-en="Reports" data-bn="রিপোর্ট">Reports</span></button>
+   <button data-page="platform" id="platformNav" class="hidden" onclick="go('platform')"><span class="ico">✦</span><span>Platform Super Admin</span></button>
    <div class="nav-label">ADMINISTRATION</div>
    <button data-page="branches" onclick="go('branches')"><span class="ico">⌂</span><span data-en="Branches" data-bn="শাখা">Branches</span></button>
    <button data-page="users" onclick="go('users')"><span class="ico">♧</span><span data-en="Admin & Staff" data-bn="অ্যাডমিন ও স্টাফ">Admin & Staff</span></button>
@@ -294,7 +304,7 @@ const TABLE = "coachingos_records";
 
 const $ = id => document.getElementById(id);
 let sb=null,user=null,cloud=false,lang="bn",currentPage="dashboard";
-let activeInstitute="",institutes=[],activeRole="owner",rows={},editingId=null;
+let activeInstitute="",institutes=[],activeRole="owner",rows={},editingId=null,isPlatformAdmin=false;
 const INSTITUTE_TYPES=[["government","সরকারি প্রতিষ্ঠান"],["private","বেসরকারি প্রতিষ্ঠান"],["school","স্কুল"],["college","কলেজ"],["university","বিশ্ববিদ্যালয়"],["madrasa","মাদ্রাসা"],["coaching","কোচিং সেন্টার"],["training","ট্রেনিং / প্রশিক্ষণ কেন্দ্র"],["ngo","এনজিও / অলাভজনক সংস্থা"],["healthcare","হাসপাতাল / ক্লিনিক"],["business","ব্যবসা প্রতিষ্ঠান"],["other","অন্যান্য"]];
 
 const modules={
@@ -529,7 +539,10 @@ async function loadAll(){
 }
 async function afterAuth(){
  if(!user)return;
- try{const m=await sb.from("institute_members").select("institute_id,role").eq("user_id",user.id);if(m.error)throw m.error;institutes=[];
+ isPlatformAdmin=false;
+ try{
+  const adminCheck=await sb.rpc("is_coachingos_super_admin");
+  isPlatformAdmin=!adminCheck.error&&adminCheck.data===true;const m=await sb.from("institute_members").select("institute_id,role").eq("user_id",user.id);if(m.error)throw m.error;institutes=[];
  for(const x of (m.data||[])){const q=await sb.from("institutes").select("id,name,institute_type,metadata").eq("id",x.institute_id).maybeSingle();if(q.error)throw q.error;if(q.data)institutes.push(q.data);}
  if(!institutes.length){const q=await sb.from("institutes").insert({name:(user.email||"My")+" Institute",owner_id:user.id,institute_type:"coaching"}).select("id,name,institute_type,metadata").single();if(q.error)throw q.error;const a=await sb.from("institute_members").insert({institute_id:q.data.id,user_id:user.id,role:"owner"});if(a.error)throw a.error;institutes=[q.data];activeRole="owner";}else activeRole=m.data[0].role||"owner";
  if(!institutes.some(x=>x.id===activeInstitute))activeInstitute=institutes[0].id;await loadAll();showApp();}
@@ -630,11 +643,13 @@ function showApp(){
  ).join("");
 
  $("instituteSelect").classList.toggle("hidden",institutes.length===0);
+ $("platformNav")?.classList.toggle("hidden",!isPlatformAdmin);
  $("addInstituteTop").classList.toggle("hidden",!cloud||activeRole!=="owner");
  render();
 }
 
 function go(page){
+ if(page==="platform"&&!isPlatformAdmin)return toast("Platform Super Admin access প্রয়োজন");
  currentPage=page;
  $("sidebar").classList.remove("open");
  document.querySelectorAll("#nav button").forEach(b=>{
@@ -667,6 +682,30 @@ function statCard(label,value,sub,icon){
   <div class="sub">${sub||""}</div>
   <div class="bubble">${icon}</div>
  </div>`;
+}
+
+
+async function renderPlatformAdmin(){
+ if(!isPlatformAdmin){$("content").innerHTML='<div class="notice">শুধু অনুমোদিত Platform Super Admin এই পৃষ্ঠা দেখতে পারবেন।</div>';return;}
+ $("content").innerHTML='<div class="platform-hero"><div class="platform-kicker">COACHINGOS • PLATFORM CONTROL</div><h1>Super Admin Dashboard</h1><p>সব প্রতিষ্ঠানের সারাংশ ও সাবস্ক্রিপশন পর্যবেক্ষণ।</p></div><div class="notice">শুধু প্ল্যাটফর্ম-স্তরের সারাংশ দেখানো হচ্ছে; প্রতিষ্ঠানের ব্যক্তিগত শিক্ষার্থী রেকর্ড নয়।</div><div class="grid"><div class="stat platform-stat"><div class="label">মোট প্রতিষ্ঠান</div><div class="num" id="paInstitutes">—</div><div class="sub">Registered institutes</div></div><div class="stat platform-stat"><div class="label">Active subscriptions</div><div class="num" id="paActive">—</div><div class="sub">চালু সাবস্ক্রিপশন</div></div><div class="stat platform-stat"><div class="label">Trial accounts</div><div class="num" id="paTrial">—</div><div class="sub">পরীক্ষামূলক অ্যাকাউন্ট</div></div><div class="stat platform-stat"><div class="label">Other statuses</div><div class="num" id="paOther">—</div><div class="sub">অন্যান্য অবস্থা</div></div></div><div class="panel" style="margin-top:16px"><div class="panel-head"><h3>প্রতিষ্ঠানসমূহ</h3><button class="btn secondary small" onclick="renderPlatformAdmin()">↻ Refresh</button></div><div id="paInstituteTable" class="empty">লোড হচ্ছে…</div></div><div class="panel" style="margin-top:16px"><div class="panel-head"><h3>Subscription Plans</h3></div><div id="paPlans" class="empty">লোড হচ্ছে…</div></div>';
+ try{
+  const r=await sb.rpc("get_coachingos_platform_overview");
+  if(r.error)throw r.error;
+  const data=r.data||{},totals=data.totals||{};
+  $("paInstitutes").textContent=Number(totals.institutes||0).toLocaleString();
+  $("paActive").textContent=Number(totals.active_subscriptions||0).toLocaleString();
+  $("paTrial").textContent=Number(totals.trial_subscriptions||0).toLocaleString();
+  $("paOther").textContent=Number(totals.other_subscriptions||0).toLocaleString();
+  const list=Array.isArray(data.institutes)?data.institutes:[];
+  $("paInstituteTable").innerHTML=list.length?'<div class="table-wrap"><table class="platform-table"><thead><tr><th>প্রতিষ্ঠান</th><th>ধরন</th><th>তৈরির তারিখ</th><th>Plan</th><th>Status</th></tr></thead><tbody>'+list.map(x=>'<tr><td><b>'+esc(x.name||"Unnamed")+'</b></td><td>'+esc(x.institute_type||"—")+'</td><td>'+esc(x.created_at?new Date(x.created_at).toLocaleDateString():"—")+'</td><td>'+esc(x.plan_name||"Not assigned")+'</td><td><span class="tag '+(x.subscription_status==="active"?"green":x.subscription_status==="trial"?"amber":"red")+'">'+esc(x.subscription_status||"not assigned")+'</span></td></tr>').join("")+'</tbody></table></div>':'<div class="empty">এখনো কোনো প্রতিষ্ঠান পাওয়া যায়নি।</div>';
+  const p=await sb.from("subscription_plans").select("id,name,monthly_price,is_active").order("monthly_price",{ascending:true});
+  if(p.error)throw p.error;
+  const plans=p.data||[];
+  $("paPlans").innerHTML=plans.length?'<div class="table-wrap"><table><thead><tr><th>Plan ID</th><th>নাম</th><th>মাসিক মূল্য</th><th>অবস্থা</th></tr></thead><tbody>'+plans.map(x=>'<tr><td>'+esc(x.id)+'</td><td>'+esc(x.name)+'</td><td>৳ '+Number(x.monthly_price||0).toLocaleString("en-BD")+'</td><td><span class="tag '+(x.is_active?"green":"red")+'">'+(x.is_active?"Active":"Inactive")+'</span></td></tr>').join("")+'</tbody></table></div>':'<div class="empty">এখনো কোনো Subscription Plan যোগ করা হয়নি।</div>';
+ }catch(e){
+  $("paInstituteTable").innerHTML='<div class="notice">Platform overview migration রান করা হয়নি বা অনুমতি নেই।<br><small>'+esc(e.message||e)+'</small></div>';
+  $("paPlans").innerHTML='<div class="empty">Subscription plan তথ্য লোড করা যায়নি।</div>';
+ }
 }
 
 function renderDashboard(){
@@ -954,6 +993,7 @@ function renderSettings(){
 
 function render(){
  const titles={
+  platform:["Platform Super Admin","Platform Super Admin"],
   dashboard:["ড্যাশবোর্ড","Dashboard"],
   reports:["রিপোর্ট","Reports"],
   settings:["সেটিংস ও ব্যাকআপ","Settings & Backup"]
@@ -964,6 +1004,7 @@ function render(){
   modules[currentPage]?.en||currentPage
  ]));
 
+ if(currentPage==="platform")return renderPlatformAdmin();
  if(currentPage==="dashboard")return renderDashboard();
  if(currentPage==="reports")return renderReports();
  if(currentPage==="settings")return renderSettings();
