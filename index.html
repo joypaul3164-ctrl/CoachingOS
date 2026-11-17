@@ -1059,6 +1059,7 @@ async function renderUsers(){
  $("content").innerHTML=`
   <div class="welcome"><div><h1>${t("অ্যাডমিন ও স্টাফ","Admin & Staff")}</h1><div class="muted">${t("এই প্রতিষ্ঠানের সদস্য, দায়িত্ব ও ডেটা ব্যবহারের অনুমতি পরিচালনা করুন।","Manage this institute's members, roles and data permissions.")}</div></div>
   ${manage?`<button class="btn" onclick="openStaffForm()">＋ ${t("স্টাফ যোগ করুন","Add Staff")}</button>`:""}</div>
+  <div class="panel" style="margin-bottom:15px"><div class="panel-head"><div><h3>${t("Pending Staff Invitations","Pending Staff Invitations")}</h3><div class="smalltext">সর্বশেষ ১০০টি invitation ও তাদের অবস্থা</div></div><button class="btn secondary small" onclick="loadStaffInvitations()">↻ Refresh</button></div><div id="staffInvitations" class="empty">লোড হচ্ছে…</div><div class="notice" style="margin-top:12px">এই ধাপে invitation তালিকা ও revoke সুবিধা চালু। Email/SMS পাঠানো এবং নতুন invitation তৈরি করার server-side delivery ব্যবস্থা এখনো যুক্ত হয়নি।</div></div>
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-bottom:16px">
    <div class="stat"><div class="label">Owner / Admin / Manager</div><div class="sub">সব মডিউল পরিচালনা</div></div>
    <div class="stat"><div class="label">Teacher</div><div class="sub">Batch, Routine, Attendance, Exams</div></div>
@@ -1076,7 +1077,7 @@ async function renderUsers(){
     <tr><td><b>Staff</b></td><td>Routine ও Attendance (শুধু দেখা)</td></tr>
    </tbody></table></div>
   </div>
-  <div class="panel" style="margin-bottom:15px"><div class="panel-head"><div><h3>${t("Pending Staff Invitations","Pending Staff Invitations")}</h3><div class="smalltext">সর্বশেষ ১০০টি invitation ও তাদের অবস্থা</div></div><button class="btn secondary small" onclick="loadStaffInvitations()">↻ Refresh</button></div><div id="staffInvitations" class="empty">লোড হচ্ছে…</div><div class="notice" style="margin-top:12px">এই ধাপে invitation তালিকা ও revoke সুবিধা চালু। Email/SMS পাঠানো এবং নতুন invitation তৈরি করার server-side delivery ব্যবস্থা এখনো যুক্ত হয়নি।</div></div>
+
   <div class="panel"><div class="panel-head"><h3>${t("প্রতিষ্ঠানের সদস্য তালিকা","Institute Members")}</h3><button class="btn secondary small" onclick="renderUsers()">↻ Refresh</button></div><div id="staffRoster" class="empty">লোড হচ্ছে…</div></div>`;
  if(!cloud){$("staffRoster").innerHTML='<div class="notice">Cloud login ছাড়া Staff Management ব্যবহার করা যাবে না।</div>';return;}
  try{
