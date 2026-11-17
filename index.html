@@ -668,7 +668,8 @@ async function signUp(){
 
   $("signupBtn").disabled=true;
 
-  const redirectTo=window.location.origin+window.location.pathname;
+  const pendingInvite=new URLSearchParams(window.location.search).get("staff_invite");
+  const redirectTo=window.location.origin+window.location.pathname+(pendingInvite?"?staff_invite="+encodeURIComponent(pendingInvite):"");
   const r=await sb.auth.signUp({
    email,
    password,
@@ -753,6 +754,21 @@ async function loadAll(){
 }
 async function afterAuth(){
  if(!user)return;
+ const inviteUrl=new URL(window.location.href);
+ const inviteToken=inviteUrl.searchParams.get("staff_invite");
+ if(inviteToken){
+  try{
+   if(!/^[0-9a-f]{64}$/i.test(inviteToken))throw new Error("Invitation link format invalid");
+   const tokenHash=await hashStaffInviteToken(inviteToken);
+   const accepted=await sb.rpc("accept_coachingos_staff_invitation",{_token_hash:tokenHash});
+   if(accepted.error)throw accepted.error;
+   inviteUrl.searchParams.delete("staff_invite");history.replaceState({},document.title,inviteUrl.pathname+inviteUrl.search+inviteUrl.hash);
+   toast("Staff invitation accepted. Institute access is ready.");
+  }catch(e){
+   toast("Invitation accept failed: "+(e.message||e)+". সঠিক account দিয়ে আবার Sign In করুন।");
+   await sb.auth.signOut();user=null;return;
+  }
+ }
  isPlatformAdmin=false;
  try{
   const adminCheck=await sb.rpc("is_coachingos_super_admin");
@@ -1059,7 +1075,7 @@ async function renderUsers(){
  $("content").innerHTML=`
   <div class="welcome"><div><h1>${t("অ্যাডমিন ও স্টাফ","Admin & Staff")}</h1><div class="muted">${t("এই প্রতিষ্ঠানের সদস্য, দায়িত্ব ও ডেটা ব্যবহারের অনুমতি পরিচালনা করুন।","Manage this institute's members, roles and data permissions.")}</div></div>
   ${manage?`<button class="btn" onclick="openStaffForm()">＋ ${t("স্টাফ যোগ করুন","Add Staff")}</button>`:""}</div>
-  <div class="panel" style="margin-bottom:15px"><div class="panel-head"><div><h3>${t("Pending Staff Invitations","Pending Staff Invitations")}</h3><div class="smalltext">সর্বশেষ ১০০টি invitation ও তাদের অবস্থা</div></div><button class="btn secondary small" onclick="loadStaffInvitations()">↻ Refresh</button></div><div id="staffInvitations" class="empty">লোড হচ্ছে…</div><div class="notice" style="margin-top:12px">এই ধাপে invitation তালিকা ও revoke সুবিধা চালু। Email/SMS পাঠানো এবং নতুন invitation তৈরি করার server-side delivery ব্যবস্থা এখনো যুক্ত হয়নি।</div></div>
+  <div class="panel" style="margin-bottom:15px"><div class="panel-head"><div><h3>${t("Pending Staff Invitations","Pending Staff Invitations")}</h3><div class="smalltext">সর্বশেষ ১০০টি invitation ও তাদের অবস্থা</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${manage?`<button class="btn small" onclick="openStaffInvitationForm()">＋ Create Invitation</button>`:""}<button class="btn secondary small" onclick="loadStaffInvitations()">↻ Refresh</button></div></div><div id="staffInvitations" class="empty">লোড হচ্ছে…</div><div class="notice" style="margin-top:12px">Invitation link তৈরি করে কপি করে নিজে পাঠাতে পারবেন। লিংক একবারই দেখানো হবে এবং ৭ দিনের মধ্যে ব্যবহার করতে হবে। স্বয়ংক্রিয় Email/SMS delivery এখনো যুক্ত হয়নি।</div></div>
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-bottom:16px">
    <div class="stat"><div class="label">Owner / Admin / Manager</div><div class="sub">সব মডিউল পরিচালনা</div></div>
    <div class="stat"><div class="label">Teacher</div><div class="sub">Batch, Routine, Attendance, Exams</div></div>
@@ -1092,6 +1108,44 @@ async function renderUsers(){
   }).join("")}</tbody></table></div>`:'<div class="empty">কোনো সদস্য পাওয়া যায়নি।</div>';
  }catch(e){$("staffRoster").innerHTML='<div class="notice">Staff list load failed: '+esc(e.message||e)+'</div>';}
  loadStaffInvitations();
+}
+function openStaffInvitationForm(){
+ if(!canManageStaff())return toast("শুধু Owner/Admin invitation তৈরি করতে পারবেন");
+ const roles=activeRole==="owner"?["admin","manager","teacher","accountant","receptionist","staff"]:["manager","teacher","accountant","receptionist","staff"];
+ $("modalRoot").innerHTML='<div class="modal-back" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="panel-head"><h3>＋ Create Staff Invitation</h3><button class="btn ghost small" onclick="closeModal()">✕</button></div><form onsubmit="createStaffInvitation(event)"><div class="form-grid"><div class="field"><label>Email (optional)</label><input id="inviteEmail" type="email" maxlength="180" placeholder="staff@example.com"></div><div class="field"><label>Phone (optional, E.164)</label><input id="invitePhone" type="tel" maxlength="16" placeholder="+8801XXXXXXXXX"></div><div class="field wide"><label>Role *</label><select id="inviteRole" required>'+roles.map(role=>'<option value="'+role+'">'+staffRoleLabel(role)+'</option>').join("")+'</select></div></div><div class="notice" style="margin-top:12px">Email অথবা Phone অন্তত একটি দিতে হবে। দুটো দিলে invited account-এ দুটোই verified থাকতে হবে। Invitation link ৭ দিন কার্যকর থাকবে।</div><div class="form-actions"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" type="submit">Create Secure Link</button></div></form></div></div>';
+}
+async function hashStaffInviteToken(token){
+ const bytes=new TextEncoder().encode(token);
+ const digest=await crypto.subtle.digest("SHA-256",bytes);
+ return Array.from(new Uint8Array(digest)).map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+async function createStaffInvitation(event){
+ event.preventDefault();
+ if(!canManageStaff())return toast("অনুমতি নেই");
+ const email=$("inviteEmail").value.trim().toLowerCase(),phone=$("invitePhone").value.trim(),role=$("inviteRole").value;
+ if(!email&&!phone)return toast("Email অথবা Phone দিন");
+ if(email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return toast("সঠিক Email দিন");
+ if(phone&&!/^[+][1-9][0-9]{7,14}$/.test(phone))return toast("Phone আন্তর্জাতিক format-এ দিন, যেমন +8801XXXXXXXXX");
+ try{
+  if(!crypto?.getRandomValues||!crypto?.subtle)throw new Error("Secure browser cryptography unavailable; HTTPS-এ খুলুন");
+  const bytes=new Uint8Array(32);crypto.getRandomValues(bytes);
+  const token=Array.from(bytes).map(x=>x.toString(16).padStart(2,"0")).join("");
+  const tokenHash=await hashStaffInviteToken(token);
+  const r=await sb.rpc("admin_create_coachingos_staff_invitation",{_institute_id:activeInstitute,_email:email||null,_phone:phone||null,_role:role,_token_hash:tokenHash});
+  if(r.error)throw r.error;
+  const row=Array.isArray(r.data)?r.data[0]:r.data;
+  if(!row?.id)throw new Error("Invitation created but expiry details were not returned");
+  const link=new URL(window.location.pathname,window.location.origin);
+  link.searchParams.set("staff_invite",token);
+  const inviteUrl=link.toString();
+  $("modalRoot").innerHTML='<div class="modal-back"><div class="modal"><div class="panel-head"><h3>Invitation Link Ready</h3><button class="btn ghost small" onclick="closeModal()">✕</button></div><div class="notice">লিংকটি এখনই কপি করে নির্দিষ্ট ব্যক্তিকে পাঠান। নিরাপত্তার জন্য পরে আর এই লিংক দেখানো যাবে না। মেয়াদ শেষ: '+esc(new Date(row.expires_at).toLocaleString())+'</div><div class="field" style="margin-top:14px"><label>Secure invitation link</label><input id="staffInviteLink" readonly value="'+esc(inviteUrl)+'"></div><div class="form-actions"><button class="btn secondary" onclick="closeModal();loadStaffInvitations()">Done</button><button class="btn" onclick="copyStaffInviteLink()">Copy Link</button></div></div></div>';
+  await loadStaffInvitations();
+ }catch(e){toast("Invitation create failed: "+(e.message||e));}
+}
+async function copyStaffInviteLink(){
+ const input=$("staffInviteLink");if(!input)return;
+ try{await navigator.clipboard.writeText(input.value);toast("Invitation link copied");}
+ catch(e){input.focus();input.select();toast("লিংকটি select হয়েছে—Copy করুন");}
 }
 async function loadStaffInvitations(){
  const root=$("staffInvitations");
