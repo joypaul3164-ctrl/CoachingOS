@@ -98,7 +98,7 @@ begin
   from public.institute_members m
   where m.institute_id = _institute_id and m.user_id = (select auth.uid());
 
-  if caller_role not in ('owner','admin') then
+  if coalesce(caller_role,'') not in ('owner','admin') then
     raise exception 'Only institute owner or admin can add staff'
       using errcode = '42501';
   end if;
@@ -154,7 +154,7 @@ begin
   from public.institute_members m
   where m.institute_id = _institute_id and m.user_id = (select auth.uid());
 
-  if caller_role not in ('owner','admin') then
+  if coalesce(caller_role,'') not in ('owner','admin') then
     raise exception 'Only institute owner or admin can change staff roles'
       using errcode = '42501';
   end if;
@@ -197,7 +197,7 @@ begin
   from public.institute_members m
   where m.institute_id = _institute_id and m.user_id = (select auth.uid());
 
-  if caller_role not in ('owner','admin') then
+  if coalesce(caller_role,'') not in ('owner','admin') then
     raise exception 'Only institute owner or admin can remove staff'
       using errcode = '42501';
   end if;
