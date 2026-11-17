@@ -353,9 +353,28 @@ async function signIn(){
  catch(e){toast("Login error: "+(e.message||e));}
 }
 async function resetPassword(){
- const email=$("email").value.trim();if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return toast("আগে সঠিক Email address লিখুন");if(!sb&&!(await initCloud()))return;
- try{const r=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});if(r.error)return toast("Reset error: "+r.error.message);toast("Password reset link Email-এ পাঠানো হয়েছে");}
- catch(e){toast("Reset error: "+(e.message||e));}
+ const emailInput=$("email");
+ const email=(emailInput?.value||"").normalize("NFKC").trim();
+ // Validate the email input itself and accept standard Gmail addresses.
+ if(!email||!emailInput||!emailInput.checkValidity()||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+  toast("সঠিক Email address লিখুন");
+  emailInput?.focus();
+  return;
+ }
+ if(!configured()){
+  toast("Supabase configuration পাওয়া যায়নি");
+  return;
+ }
+ if(!sb&&!initCloud())return;
+ if(!sb)return toast("Supabase সংযোগ হয়নি");
+ try{
+  const redirectTo=window.location.origin+window.location.pathname;
+  const r=await sb.auth.resetPasswordForEmail(email,{redirectTo});
+  if(r.error)return toast("Reset error: "+r.error.message);
+  toast("Password reset link Email-এ পাঠানো হয়েছে");
+ }catch(e){
+  toast("Reset error: "+(e.message||e));
+ }
 }
 function showRecoveryForm(){
  const card=document.querySelector(".login-card");if(!card)return;
