@@ -843,11 +843,15 @@ async function renderPlatformAdmin(){
   const p=await sb.from("subscription_plans").select("id,name,monthly_price,is_active").order("monthly_price",{ascending:true});
   if(p.error)throw p.error;
   const plans=p.data||[];
-  $("paPlans").innerHTML=plans.length?'<div class="table-wrap"><table><thead><tr><th>Plan ID</th><th>নাম</th><th>মাসিক মূল্য</th><th>অবস্থা</th><th>Action</th></tr></thead><tbody>'+plans.map(x=>'<tr><td>'+esc(x.id)+'</td><td>'+esc(x.name)+'</td><td>৳ '+Number(x.monthly_price||0).toLocaleString("en-BD")+'</td><td><span class="tag '+(x.is_active?"green":"red")+'">'+(x.is_active?"Active":"Inactive")+'</span></td><td><button class="btn secondary small" onclick="editPlatformPlan(\''+esc(x.id)+'\',\''+esc(x.name)+'\','+Number(x.monthly_price||0)+','+(x.is_active?"true":"false")+')">Edit</button></td></tr>').join("")+'</tbody></table></div>':'<div class="empty">এখনো কোনো Subscription Plan নেই।</div>';
+  $("paPlans").innerHTML=plans.length?'<div class="table-wrap"><table><thead><tr><th>Plan ID</th><th>নাম</th><th>মাসিক মূল্য</th><th>অবস্থা</th><th>Action</th></tr></thead><tbody>'+plans.map(x=>'<tr><td>'+esc(x.id)+'</td><td>'+esc(x.name)+'</td><td>৳ '+Number(x.monthly_price||0).toLocaleString("en-BD")+'</td><td><span class="tag '+(x.is_active?"green":"red")+'">'+(x.is_active?"Active":"Inactive")+'</span></td><td><button class="btn secondary small" data-plan-id="'+esc(x.id)+'" data-plan-name="'+esc(x.name)+'" data-plan-price="'+Number(x.monthly_price||0)+'" data-plan-active="'+(x.is_active?"true":"false")+'" onclick="editPlatformPlanFromButton(this)">Edit</button></td></tr>').join("")+'</tbody></table></div>':'<div class="empty">এখনো কোনো Subscription Plan নেই।</div>';
  }catch(e){
   $("paInstituteTable").innerHTML='<div class="notice">Platform control migration রান করার পর এই অংশ চালু হবে।<br><small>'+esc(e.message||e)+'</small></div>';
   $("paPlans").innerHTML='<div class="empty">Plan তথ্য লোড করা যায়নি।</div>';
  }
+}
+
+function editPlatformPlanFromButton(button){
+ editPlatformPlan(button.dataset.planId,button.dataset.planName,Number(button.dataset.planPrice),button.dataset.planActive==="true");
 }
 
 function editPlatformPlan(id,name,price,active){
