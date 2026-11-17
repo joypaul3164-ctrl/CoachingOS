@@ -358,8 +358,12 @@ async function resetPassword(){
  catch(e){toast("Reset error: "+(e.message||e));}
 }
 function showRecoveryForm(){
- const card=document.querySelector(".login-card");if(!card||$("recoveryForm"))return;const f=document.createElement("div");f.id="recoveryForm";
- f.innerHTML='<h3>নতুন Password সেট করুন</h3><div class="field"><label>New Password</label><input id="newPassword" type="password" minlength="6"></div><div class="field"><label>Confirm Password</label><input id="confirmPassword" type="password" minlength="6"></div><button class="btn fullbtn" onclick="updateRecoveredPassword()">Update Password</button>';card.appendChild(f);
+ const card=document.querySelector(".login-card");if(!card)return;
+ $("appView")?.classList.add("hidden");$("loginView")?.classList.remove("hidden");
+ if($("recoveryForm"))return;
+ const f=document.createElement("div");f.id="recoveryForm";
+ f.innerHTML='<h3>নতুন Password সেট করুন</h3><div class="field"><label>New Password</label><input id="newPassword" type="password" minlength="6" autocomplete="new-password"></div><div class="field"><label>Confirm Password</label><input id="confirmPassword" type="password" minlength="6" autocomplete="new-password"></div><button class="btn fullbtn" onclick="updateRecoveredPassword()">Update Password</button>';
+ card.appendChild(f);
 }
 async function updateRecoveredPassword(){
  const p=$("newPassword")?.value||"",q=$("confirmPassword")?.value||"";if(p.length<6)return toast("Password কমপক্ষে ৬ অক্ষরের হতে হবে");if(p!==q)return toast("দুটি Password মিলছে না");
@@ -883,18 +887,24 @@ async function boot(){
  if(!ok)return;
 
  try{
+  // Listen before getSession so the PASSWORD_RECOVERY event cannot be missed.
+  sb.auth.onAuthStateChange((event,session)=>{
+   if(event==="PASSWORD_RECOVERY")showRecoveryForm();
+   else if(event==="SIGNED_OUT"){user=null;$("appView").classList.add("hidden");$("loginView").classList.remove("hidden");}
+  });
+
+  const recoveryParams=new URLSearchParams((location.hash||"").replace(/^#/,""));
+  const queryParams=new URLSearchParams(location.search||"");
+  const isRecovery=recoveryParams.get("type")==="recovery"||queryParams.get("type")==="recovery";
+
   const session=await sb.auth.getSession();
   if(session.error){
    toast("Session error: "+session.error.message);
    return;
   }
 
-  sb.auth.onAuthStateChange((event,session)=>{
-   if(event==="PASSWORD_RECOVERY")showRecoveryForm();
-   else if(event==="SIGNED_OUT"){user=null;$("appView").classList.add("hidden");$("loginView").classList.remove("hidden");}
-  });
-  if(session.data.session){user=session.data.session.user;await afterAuth();}
-  if(window.location.hash.includes("type=recovery"))showRecoveryForm();
+  if(isRecovery)showRecoveryForm();
+  else if(session.data.session){user=session.data.session.user;await afterAuth();}
 
  }catch(e){
   toast("Startup error: "+(e.message||e));
