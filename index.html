@@ -457,6 +457,7 @@ tbody tr:hover{background:#f8faff}
 .notification-item p{margin:4px 0 5px;color:var(--muted);font-size:12px;white-space:normal}
 .notification-item small{color:var(--muted);font-size:10px}
 .notification-actions{display:flex;gap:7px;flex-wrap:wrap}
+.app.portal-mode .sidebar{display:none}.app.portal-mode .main{margin-left:0}.app.portal-mode #notificationBell,.app.portal-mode #addInstituteTop{display:none!important}
 </style>
 </head>
 <body>
@@ -522,7 +523,7 @@ const TABLE = "coachingos_records";
 
 const $ = id => document.getElementById(id);
 let sb=null,user=null,cloud=false,lang="bn",currentPage="dashboard";
-let activeInstitute="",institutes=[],activeRole="owner",rows={},editingId=null,isPlatformAdmin=false;
+let activeInstitute="",institutes=[],activeRole="owner",rows={},editingId=null,isPlatformAdmin=false,portalMode=false,portalProfiles=[],portalSelectedIndex=0;
 const INSTITUTE_TYPES=[["government","সরকারি প্রতিষ্ঠান"],["private","বেসরকারি প্রতিষ্ঠান"],["school","স্কুল"],["college","কলেজ"],["university","বিশ্ববিদ্যালয়"],["madrasa","মাদ্রাসা"],["coaching","কোচিং সেন্টার"],["training","ট্রেনিং / প্রশিক্ষণ কেন্দ্র"],["ngo","এনজিও / অলাভজনক সংস্থা"],["healthcare","হাসপাতাল / ক্লিনিক"],["business","ব্যবসা প্রতিষ্ঠান"],["other","অন্যান্য"]];
 
 const modules={
@@ -782,7 +783,7 @@ async function afterAuth(){
  isPlatformAdmin=false;
  try{
   const adminCheck=await sb.rpc("is_coachingos_super_admin");
-  isPlatformAdmin=!adminCheck.error&&adminCheck.data===true;const m=await sb.from("institute_members").select("institute_id,role").eq("user_id",user.id);if(m.error)throw m.error;institutes=[];
+  isPlatformAdmin=!adminCheck.error&&adminCheck.data===true;const m=await sb.from("institute_members").select("institute_id,role").eq("user_id",user.id);if(m.error)throw m.error;institutes=[];portalMode=false;portalProfiles=[];if(!(m.data||[]).length){const portal=await sb.rpc("get_coachingos_portal_dashboard");if(portal.error)throw portal.error;if(Array.isArray(portal.data)&&portal.data.length){portalMode=true;portalProfiles=portal.data;portalSelectedIndex=0;activeInstitute=portalProfiles[0].institute_id;activeRole="portal";showApp();return;}}
  for(const x of (m.data||[])){const q=await sb.from("institutes").select("id,name,institute_type,metadata").eq("id",x.institute_id).maybeSingle();if(q.error)throw q.error;if(q.data)institutes.push(q.data);}
  if(!institutes.length){const q=await sb.from("institutes").insert({name:(user.email||"My")+" Institute",owner_id:user.id,institute_type:"coaching"}).select("id,name,institute_type,metadata").single();if(q.error)throw q.error;const a=await sb.from("institute_members").insert({institute_id:q.data.id,user_id:user.id,role:"owner"});if(a.error)throw a.error;institutes=[q.data];activeRole="owner";}else activeRole=m.data[0].role||"owner";
  if(!institutes.some(x=>x.id===activeInstitute))activeInstitute=institutes[0].id;await loadAll();showApp();}
@@ -875,6 +876,7 @@ async function deleteRecord(module,id){
 function showApp(){
  $("loginView").classList.add("hidden");
  $("appView").classList.remove("hidden");
+ $("appView").classList.toggle("portal-mode",portalMode);
  $("avatar").textContent=(user?.email||"A").charAt(0).toUpperCase();
  $("connectionState").textContent=cloud?"CLOUD":"LOCAL MODE";
 
@@ -882,11 +884,11 @@ function showApp(){
   `<option value="${esc(i.id)}" ${i.id===activeInstitute?"selected":""}>${esc(i.name)}${i.institute_type?" — "+esc(INSTITUTE_TYPES.find(x=>x[0]===i.institute_type)?.[1]||i.institute_type):""}</option>`
  ).join("");
 
- $("instituteSelect").classList.toggle("hidden",institutes.length===0);
+ $("instituteSelect").classList.toggle("hidden",portalMode||institutes.length===0);
  $("platformNav")?.classList.toggle("hidden",!isPlatformAdmin);
- $("addInstituteTop").classList.toggle("hidden",!cloud||activeRole!=="owner");
- $("notificationBell")?.classList.toggle("hidden",!cloud);
- if(cloud)refreshNotificationBadge();
+ $("addInstituteTop").classList.toggle("hidden",portalMode||!cloud||activeRole!=="owner");
+ $("notificationBell")?.classList.toggle("hidden",portalMode||!cloud);
+ if(cloud&&!portalMode)refreshNotificationBadge();
  render();
 }
 
@@ -1137,6 +1139,7 @@ async function renderUsers(){
  $("content").innerHTML=`
   <div class="welcome"><div><h1>${t("অ্যাডমিন ও স্টাফ","Admin & Staff")}</h1><div class="muted">${t("এই প্রতিষ্ঠানের সদস্য, দায়িত্ব ও ডেটা ব্যবহারের অনুমতি পরিচালনা করুন।","Manage this institute's members, roles and data permissions.")}</div></div>
   ${manage?`<button class="btn" onclick="openStaffForm()">＋ ${t("স্টাফ যোগ করুন","Add Staff")}</button>`:""}</div>
+  <div class="panel" style="margin-bottom:15px"><div class="panel-head"><div><h3>🎓 Student & Parent Portal Access</h3><div class="smalltext">Verified existing accounts can be linked to a student record.</div></div><button class="btn small" onclick="openPortalLinkForm()" ${manage?"":"disabled"}>＋ Link Portal Account</button></div><div class="notice">শিক্ষার্থী/অভিভাবকের verified CoachingOS account email দিয়ে link করুন। তারা ওই account দিয়ে sign in করলে শুধু linked শিক্ষার্থীর তথ্য দেখতে পারবে।</div></div>
   <div class="panel" style="margin-bottom:15px"><div class="panel-head"><div><h3>${t("Pending Staff Invitations","Pending Staff Invitations")}</h3><div class="smalltext">সর্বশেষ ১০০টি invitation ও তাদের অবস্থা</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${manage?`<button class="btn small" onclick="openStaffInvitationForm()">＋ Create Invitation</button>`:""}<button class="btn secondary small" onclick="loadStaffInvitations()">↻ Refresh</button></div></div><div id="staffInvitations" class="empty">লোড হচ্ছে…</div><div class="notice" style="margin-top:12px">Invitation link তৈরি করে কপি করে নিজে পাঠাতে পারবেন। লিংক একবারই দেখানো হবে এবং ৭ দিনের মধ্যে ব্যবহার করতে হবে। স্বয়ংক্রিয় Email/SMS delivery এখনো যুক্ত হয়নি।</div></div>
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-bottom:16px">
    <div class="stat"><div class="label">Owner / Admin / Manager</div><div class="sub">সব মডিউল পরিচালনা</div></div>
@@ -1172,6 +1175,42 @@ async function renderUsers(){
  }catch(e){$("staffRoster").innerHTML='<div class="notice">Staff list load failed: '+esc(e.message||e)+'</div>';}
  loadStaffInvitations();
  loadStaffAuditLogs();
+}
+
+function openPortalLinkForm(){
+ if(!cloud||!canManageStaff())return toast("Owner/Admin/Manager access প্রয়োজন");
+ const students=rows.students||[];
+ if(!students.length)return toast("আগে Students মডিউলে শিক্ষার্থী যোগ করুন");
+ const options=students.map(st=>'<option value="'+esc(st.id)+'">'+esc(st.name||"Unnamed")+(st.roll?' — Roll '+esc(st.roll):'')+'</option>').join("");
+ $("modalRoot").innerHTML='<div class="modal-back" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="panel-head"><h3>Link Student / Parent Portal</h3><button class="btn ghost small" onclick="closeModal()">✕</button></div><form onsubmit="submitPortalLink(event)"><div class="field"><label>Student</label><select id="portalStudentId" required>'+options+'</select></div><div class="field" style="margin-top:12px"><label>Registered verified account email</label><input id="portalEmail" type="email" required placeholder="student-or-parent@example.com"></div><div class="field" style="margin-top:12px"><label>Relationship</label><select id="portalRelationship"><option value="parent">Parent</option><option value="student">Student</option><option value="guardian">Guardian</option></select></div><div class="notice" style="margin-top:12px">The email must already have a CoachingOS account and be verified. This action does not send an email or create an account.</div><div class="form-actions"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" type="submit">Link Account</button></div></form></div></div>';
+}
+async function submitPortalLink(event){
+ event.preventDefault();
+ const studentId=$("portalStudentId")?.value,email=$("portalEmail")?.value.trim(),relationship=$("portalRelationship")?.value||"parent";
+ if(!studentId||!email)return toast("Student ও email নির্বাচন করুন");
+ try{
+  const r=await sb.rpc("admin_link_coachingos_portal_account",{_institute_id:activeInstitute,_student_record_id:studentId,_email:email,_relationship:relationship});
+  if(r.error)throw r.error;
+  closeModal();toast("Portal account successfully linked. এখন ওই verified account দিয়ে sign in করা যাবে।");
+ }catch(e){toast("Portal link failed: "+(e.message||e));}
+}
+function renderPortalDashboard(){
+ const p=portalProfiles[portalSelectedIndex];
+ if(!p){$("content").innerHTML='<div class="empty">No linked student profile found.</div>';return;}
+ const st=p.student||{},att=p.attendance||[],ex=p.exams||[],fees=p.fees||[];
+ const present=att.filter(x=>x.status==="Present").length,absent=att.filter(x=>x.status==="Absent").length,due=fees.reduce((n,x)=>n+Number(x.due||0),0);
+ const profileOptions=portalProfiles.map((x,i)=>'<option value="'+i+'" '+(i===portalSelectedIndex?'selected':'')+'>'+esc(x.student?.name||"Student")+' — '+esc(x.institute_name||"Institute")+'</option>').join("");
+ $("pageTitle").textContent="Student & Parent Portal";
+ $("content").innerHTML='<div class="platform-hero"><div class="platform-kicker">COACHINGOS • LEARNER SPACE</div><h1>Welcome, '+esc(st.name||"Student")+'</h1><p>'+esc(p.institute_name||"Institute")+' · '+esc(p.relationship||"parent")+' access</p></div>'+
+ (portalProfiles.length>1?'<div class="panel" style="margin-bottom:15px"><div class="field"><label>Select student</label><select onchange="portalSelectedIndex=Number(this.value);renderPortalDashboard()">'+profileOptions+'</select></div></div>':'')+
+ '<div class="grid"><div class="stat"><div class="label">Class / Batch</div><div class="num" style="font-size:20px">'+esc(st.class_name||st.batch||"—")+'</div><div class="sub">Roll: '+esc(st.roll||"—")+'</div></div><div class="stat"><div class="label">Present</div><div class="num">'+present+'</div><div class="sub">Attendance records</div></div><div class="stat"><div class="label">Absent</div><div class="num">'+absent+'</div><div class="sub">Attendance records</div></div><div class="stat"><div class="label">Outstanding fees</div><div class="num" style="font-size:22px">'+money(due)+'</div><div class="sub">Based on recorded fee dues</div></div></div>'+
+ '<div class="section-row"><div class="panel"><div class="panel-head"><h3>📅 Attendance</h3></div>'+portalTable(att,[["date","Date"],["batch","Batch"],["status","Status"],["note","Note"]])+'</div><div class="panel"><div class="panel-head"><h3>🏆 Exam Results</h3></div>'+portalTable(ex,[["exam","Exam"],["subject","Subject"],["marks","Marks"],["total","Total"],["grade","Grade"],["exam_date","Date"]])+'</div></div>'+
+ '<div class="panel" style="margin-top:15px"><div class="panel-head"><h3>৳ Fee History</h3></div>'+portalTable(fees,[["month","Month"],["amount","Amount"],["paid","Paid"],["due","Due"],["date","Date"],["receipt","Receipt"]])+'</div>'+
+ '<div class="notice" style="margin-top:15px">Read-only portal: contact your institute for corrections. Only records linked to this student are shown.</div>';
+}
+function portalTable(items,fields){
+ if(!items.length)return '<div class="empty">No records available yet.</div>';
+ return '<div class="table-wrap"><table><thead><tr>'+fields.map(f=>'<th>'+f[1]+'</th>').join("")+'</tr></thead><tbody>'+items.map(x=>'<tr>'+fields.map(f=>'<td>'+esc(x[f[0]]??"—")+'</td>').join("")+'</tr>').join("")+'</tbody></table></div>';
 }
 let staffAuditCache=[];
 const staffAuditLabels={member_added:"Staff added",member_role_changed:"Role changed",member_removed:"Staff removed",invitation_created:"Invitation created",invitation_accepted:"Invitation accepted",invitation_revoked:"Invitation revoked",invitation_expired:"Invitation expired"};
@@ -1534,6 +1573,7 @@ function renderSettings(){
 }
 
 function render(){
+ if(portalMode)return renderPortalDashboard();
  const titles={
   platform:["Platform Super Admin","Platform Super Admin"],
   dashboard:["ড্যাশবোর্ড","Dashboard"],
