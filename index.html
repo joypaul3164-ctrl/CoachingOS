@@ -810,7 +810,7 @@ async function submitInstitute(event){
  }catch(e){toast("Institute error: "+(e.message||e));}
 }
 
-async function signOut(){if(sb)await sb.auth.signOut();user=null;activeInstitute="";institutes=[];rows={};$("appView").classList.add("hidden");$("loginView").classList.remove("hidden");}
+async function signOut(){if(sb)await sb.auth.signOut();user=null;activeInstitute="";institutes=[];rows={};portalMode=false;portalProfiles=[];$("appView").classList.add("hidden");$("loginView").classList.remove("hidden");}
 
 async function saveRecord(module,data,id=null){
  try{
@@ -1136,10 +1136,11 @@ function renderDashboard(){
 
 async function renderUsers(){
  const manage=canManageStaff();
+ const portalManage=["owner","admin","manager"].includes(activeRole);
  $("content").innerHTML=`
   <div class="welcome"><div><h1>${t("অ্যাডমিন ও স্টাফ","Admin & Staff")}</h1><div class="muted">${t("এই প্রতিষ্ঠানের সদস্য, দায়িত্ব ও ডেটা ব্যবহারের অনুমতি পরিচালনা করুন।","Manage this institute's members, roles and data permissions.")}</div></div>
   ${manage?`<button class="btn" onclick="openStaffForm()">＋ ${t("স্টাফ যোগ করুন","Add Staff")}</button>`:""}</div>
-  <div class="panel" style="margin-bottom:15px"><div class="panel-head"><div><h3>🎓 Student & Parent Portal Access</h3><div class="smalltext">Verified existing accounts can be linked to a student record.</div></div><button class="btn small" onclick="openPortalLinkForm()" ${manage?"":"disabled"}>＋ Link Portal Account</button></div><div class="notice">শিক্ষার্থী/অভিভাবকের verified CoachingOS account email দিয়ে link করুন। তারা ওই account দিয়ে sign in করলে শুধু linked শিক্ষার্থীর তথ্য দেখতে পারবে।</div></div>
+  <div class="panel" style="margin-bottom:15px"><div class="panel-head"><div><h3>🎓 Student & Parent Portal Access</h3><div class="smalltext">Verified existing accounts can be linked to a student record.</div></div><button class="btn small" onclick="openPortalLinkForm()" ${portalManage?"":"disabled"}>＋ Link Portal Account</button></div><div class="notice">শিক্ষার্থী/অভিভাবকের verified CoachingOS account email দিয়ে link করুন। তারা ওই account দিয়ে sign in করলে শুধু linked শিক্ষার্থীর তথ্য দেখতে পারবে।</div></div>
   <div class="panel" style="margin-bottom:15px"><div class="panel-head"><div><h3>${t("Pending Staff Invitations","Pending Staff Invitations")}</h3><div class="smalltext">সর্বশেষ ১০০টি invitation ও তাদের অবস্থা</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${manage?`<button class="btn small" onclick="openStaffInvitationForm()">＋ Create Invitation</button>`:""}<button class="btn secondary small" onclick="loadStaffInvitations()">↻ Refresh</button></div></div><div id="staffInvitations" class="empty">লোড হচ্ছে…</div><div class="notice" style="margin-top:12px">Invitation link তৈরি করে কপি করে নিজে পাঠাতে পারবেন। লিংক একবারই দেখানো হবে এবং ৭ দিনের মধ্যে ব্যবহার করতে হবে। স্বয়ংক্রিয় Email/SMS delivery এখনো যুক্ত হয়নি।</div></div>
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-bottom:16px">
    <div class="stat"><div class="label">Owner / Admin / Manager</div><div class="sub">সব মডিউল পরিচালনা</div></div>
@@ -1178,7 +1179,7 @@ async function renderUsers(){
 }
 
 function openPortalLinkForm(){
- if(!cloud||!canManageStaff())return toast("Owner/Admin/Manager access প্রয়োজন");
+ if(!cloud||!["owner","admin","manager"].includes(activeRole))return toast("Owner/Admin/Manager access প্রয়োজন");
  const students=rows.students||[];
  if(!students.length)return toast("আগে Students মডিউলে শিক্ষার্থী যোগ করুন");
  const options=students.map(st=>'<option value="'+esc(st.id)+'">'+esc(st.name||"Unnamed")+(st.roll?' — Roll '+esc(st.roll):'')+'</option>').join("");
