@@ -710,9 +710,17 @@ async function signUp(){
 }
 
 async function signIn(){
- try{const email=$("email").value.trim(),password=$("password").value;if(!email||!password)return toast("Email ও Password লিখুন");if(!sb&&!(await initCloud()))return;
- const r=await sb.auth.signInWithPassword({email,password});if(r.error)return toast("Login failed: "+r.error.message);user=r.data.user;await afterAuth();}
- catch(e){toast("Login error: "+(e.message||e));}
+ try{
+  const email=$("email").value.trim(),password=$("password").value;
+  if(!email||!password)return toast("Email ও Password লিখুন");
+  if(!sb&&!(await initCloud()))return;
+  const r=await sb.auth.signInWithPassword({email,password});
+  if(r.error)return toast("Login failed: "+r.error.message);
+  const verified=await sb.auth.getUser();
+  if(verified.error||!verified.data?.user)throw new Error("Authenticated account could not be verified");
+  user=verified.data.user;
+  await afterAuth();
+ }catch(e){toast("Login error: "+(e.message||e));}
 }
 async function resetPassword(){
  const emailInput=$("email");
@@ -783,7 +791,13 @@ async function afterAuth(){
  isPlatformAdmin=false;
  try{
   const adminCheck=await sb.rpc("is_coachingos_super_admin");
-  isPlatformAdmin=!adminCheck.error&&adminCheck.data===true;const m=await sb.from("institute_members").select("institute_id,role").eq("user_id",user.id);if(m.error)throw m.error;institutes=[];portalMode=false;portalProfiles=[];if(!(m.data||[]).length){const portal=await sb.rpc("get_coachingos_portal_dashboard");if(portal.error)throw portal.error;if(Array.isArray(portal.data)&&portal.data.length){portalMode=true;portalProfiles=portal.data;portalSelectedIndex=0;activeInstitute=portalProfiles[0].institute_id;activeRole="portal";showApp();return;}}
+  isPlatformAdmin=!adminCheck.error&&adminCheck.data===true;const m=await sb.from("institute_members").select("institute_id,role").eq("user_id",user.id);if(m.error)throw m.error;institutes=[];portalMode=false;portalProfiles=[];if(!(m.data||[]).length){const portal=await sb.rpc("get_coachingos_portal_dashboard");if(portal.error)throw portal.error;if(Array.isArray(portal.data)&&portal.data.length){
+  if(portal.data.some(p=>!p.linked_user_id||p.linked_user_id!==user.id)){
+   portalProfiles=[];portalMode=false;await sb.auth.signOut();user=null;
+   throw new Error("Portal account verification failed. No student data was displayed. Please contact the institute administrator.");
+  }
+  portalMode=true;portalProfiles=portal.data;portalSelectedIndex=0;activeInstitute=portalProfiles[0].institute_id;activeRole="portal";showApp();return;
+ }}
  for(const x of (m.data||[])){const q=await sb.from("institutes").select("id,name,institute_type,metadata").eq("id",x.institute_id).maybeSingle();if(q.error)throw q.error;if(q.data)institutes.push(q.data);}
  if(!institutes.length){const q=await sb.from("institutes").insert({name:(user.email||"My")+" Institute",owner_id:user.id,institute_type:"coaching"}).select("id,name,institute_type,metadata").single();if(q.error)throw q.error;const a=await sb.from("institute_members").insert({institute_id:q.data.id,user_id:user.id,role:"owner"});if(a.error)throw a.error;institutes=[q.data];activeRole="owner";}else activeRole=m.data[0].role||"owner";
  if(!institutes.some(x=>x.id===activeInstitute))activeInstitute=institutes[0].id;await loadAll();showApp();}
@@ -1202,7 +1216,7 @@ function renderPortalDashboard(){
  const present=att.filter(x=>x.status==="Present").length,absent=att.filter(x=>x.status==="Absent").length,due=fees.reduce((n,x)=>n+Number(x.due||0),0);
  const profileOptions=portalProfiles.map((x,i)=>'<option value="'+i+'" '+(i===portalSelectedIndex?'selected':'')+'>'+esc(x.student?.name||"Student")+' — '+esc(x.institute_name||"Institute")+'</option>').join("");
  $("pageTitle").textContent="Student & Parent Portal";
- $("content").innerHTML='<div class="platform-hero"><div class="platform-kicker">COACHINGOS • LEARNER SPACE</div><h1>Welcome, '+esc(st.name||"Student")+'</h1><p>'+esc(p.institute_name||"Institute")+' · '+esc(p.relationship||"parent")+' access</p></div>'+
+ $("content").innerHTML='<div class="platform-hero"><div class="platform-kicker">COACHINGOS • LEARNER SPACE</div><h1>Welcome, '+esc(st.name||"Student")+'</h1><p>'+esc(p.institute_name||"Institute")+' · '+esc(p.relationship||"parent")+' access</p><p style="margin-top:9px;font-size:11px;color:#c5f4ef">Signed in as: '+esc(user?.email||"Unknown account")+'</p></div>'+
  (portalProfiles.length>1?'<div class="panel" style="margin-bottom:15px"><div class="field"><label>Select student</label><select onchange="portalSelectedIndex=Number(this.value);renderPortalDashboard()">'+profileOptions+'</select></div></div>':'')+
  '<div class="grid"><div class="stat"><div class="label">Class / Batch</div><div class="num" style="font-size:20px">'+esc(st.class_name||st.batch||"—")+'</div><div class="sub">Roll: '+esc(st.roll||"—")+'</div></div><div class="stat"><div class="label">Present</div><div class="num">'+present+'</div><div class="sub">Attendance records</div></div><div class="stat"><div class="label">Absent</div><div class="num">'+absent+'</div><div class="sub">Attendance records</div></div><div class="stat"><div class="label">Outstanding fees</div><div class="num" style="font-size:22px">'+money(due)+'</div><div class="sub">Based on recorded fee dues</div></div></div>'+
  '<div class="section-row"><div class="panel"><div class="panel-head"><h3>📅 Attendance</h3></div>'+portalTable(att,[["date","Date"],["batch","Batch"],["status","Status"],["note","Note"]])+'</div><div class="panel"><div class="panel-head"><h3>🏆 Exam Results</h3></div>'+portalTable(ex,[["exam","Exam"],["subject","Subject"],["marks","Marks"],["total","Total"],["grade","Grade"],["exam_date","Date"]])+'</div></div>'+
