@@ -20,15 +20,6 @@ create table if not exists public.subscription_plans (
   created_at timestamptz not null default now()
 );
 
-insert into public.subscription_plans
-  (id, name, monthly_price, max_branches, max_members, max_records, features)
-values
-  ('free', 'Free', 0, 1, 3, 500, '{"reports":true,"exports":false}'::jsonb),
-  ('basic', 'Basic', 499, 3, 10, 5000, '{"reports":true,"exports":true}'::jsonb),
-  ('pro', 'Pro', 1499, 10, 50, 50000, '{"reports":true,"exports":true,"advanced_analytics":true}'::jsonb),
-  ('enterprise', 'Enterprise', 4999, null, null, null, '{"reports":true,"exports":true,"advanced_analytics":true,"priority_support":true}'::jsonb)
-on conflict (id) do nothing;
-
 create table if not exists public.institute_subscriptions (
   id uuid primary key default gen_random_uuid(),
   institute_id uuid not null unique references public.institutes(id) on delete cascade,
@@ -141,13 +132,6 @@ on public.institute_subscriptions for select
 to authenticated
 using (public.can_view_coachingos_subscription(institute_id));
 
-drop policy if exists "Super admins can manage subscriptions" on public.institute_subscriptions;
-create policy "Super admins can manage subscriptions"
-on public.institute_subscriptions for all
-to authenticated
-using (public.is_coachingos_super_admin())
-with check (public.is_coachingos_super_admin());
-
 -- Members can see their own membership. Owners/admins/managers can view
 -- the member roster for their own institute; no cross-institute access.
 drop policy if exists "Users can view their own institute memberships" on public.institute_members;
@@ -175,5 +159,7 @@ revoke insert, update, delete on public.subscription_plans from anon, authentica
 grant select on public.subscription_plans to authenticated;
 revoke insert, update, delete on public.institute_subscriptions from anon, authenticated;
 grant select on public.institute_subscriptions to authenticated;
+-- Subscription changes and plan configuration are performed by trusted server-side
+-- billing/admin functions, never directly by an ordinary browser session.
 
 grant usage on schema public to authenticated;
