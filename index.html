@@ -144,7 +144,7 @@ tr:last-child td{border-bottom:0}
  <main class="main">
   <header class="topbar">
    <div style="display:flex;align-items:center;gap:10px"><button class="btn ghost mobile-menu" onclick="$('sidebar').classList.toggle('open')">☰</button><div class="crumb" id="pageTitle">Dashboard</div></div>
-   <div class="top-actions"><select id="instituteSelect" class="branch-select" onchange="switchInstitute(this.value)" title="Institute"></select><span class="pill" id="connectionState">LOCAL MODE</span><button class="btn ghost small" onclick="toggleLanguage()" id="langBtn">বাংলা</button><div class="avatar" id="avatar">A</div><button class="btn ghost small" onclick="signOut()">Logout</button></div>
+   <div class="top-actions"><select id="instituteSelect" class="branch-select" onchange="switchInstitute(this.value)" title="Institute"></select><button class="btn secondary small hidden" id="addInstituteTop" onclick="addInstitute()">＋ নতুন প্রতিষ্ঠান</button><span class="pill" id="connectionState">LOCAL MODE</span><button class="btn ghost small" onclick="toggleLanguage()" id="langBtn">বাংলা</button><div class="avatar" id="avatar">A</div><button class="btn ghost small" onclick="signOut()">Logout</button></div>
   </header>
   <div class="content" id="content"></div>
  </main>
@@ -482,7 +482,8 @@ function showApp(){
   `<option value="${esc(i.id)}" ${i.id===activeInstitute?"selected":""}>${esc(i.name)}</option>`
  ).join("");
 
- $("instituteSelect").classList.toggle("hidden",institutes.length<2);
+ $("instituteSelect").classList.toggle("hidden",institutes.length===0);
+ $("addInstituteTop").classList.toggle("hidden",!cloud||activeRole!=="owner");
  render();
 }
 
