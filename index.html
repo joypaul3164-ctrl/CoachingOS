@@ -1484,7 +1484,7 @@ function filterTable(module,value){
 }
 
 function openForm(module,id=null){
- if(!canWrite())return toast("আপনার অনুমতি নেই");
+ if(!canWrite(module))return toast("আপনার অনুমতি নেই");
  const config=modules[module];
  if(!config)return;
 
