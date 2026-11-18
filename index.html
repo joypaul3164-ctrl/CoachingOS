@@ -1167,12 +1167,14 @@ async function saveRecord(module,data,id=null){
    let r;
    if(id){
     r=await sb.from(TABLE).update(payload)
-     .eq("id",id).eq("institute_id",activeInstitute);
+     .eq("id",id).eq("institute_id",activeInstitute)
+     .select("id").maybeSingle();
    }else{
     r=await sb.from(TABLE).insert(payload).select("id").single();
    }
 
    if(r.error){toast("Save error: "+r.error.message);return false;}
+   if(id&&!r.data?.id){toast("Update failed: record not found or permission denied");return false;}
    const savedRecordId=id||r.data?.id||null;
    await loadAll();
    if(module==="attendance"&&data.status==="Present"&&savedRecordId){
