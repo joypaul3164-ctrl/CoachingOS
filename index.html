@@ -773,6 +773,12 @@ async function loadAll(){
 }
 async function afterAuth(){
  if(!user)return;
+ const verifiedSession=await sb.auth.getUser();
+ if(verifiedSession.error||!verifiedSession.data?.user){
+  await sb.auth.signOut();user=null;portalMode=false;portalProfiles=[];
+  return toast("Login identity যাচাই করা যায়নি। আবার Sign In করুন।");
+ }
+ user=verifiedSession.data.user;
  const inviteUrl=new URL(window.location.href);
  const inviteToken=inviteUrl.searchParams.get("staff_invite");
  if(inviteToken){
@@ -795,6 +801,10 @@ async function afterAuth(){
   if(portal.data.some(p=>!p.linked_user_id||p.linked_user_id!==user.id)){
    portalProfiles=[];portalMode=false;await sb.auth.signOut();user=null;
    throw new Error("Portal account verification failed. No student data was displayed. Please contact the institute administrator.");
+  }
+  if(portal.data.length>1&&portal.data.some(p=>p.relationship==="student")){
+   portalProfiles=[];portalMode=false;await sb.auth.signOut();user=null;
+   throw new Error("Student account has multiple or mixed profile links. Access was blocked for privacy. Ask the institute to correct the links.");
   }
   portalMode=true;portalProfiles=portal.data;portalSelectedIndex=0;activeInstitute=portalProfiles[0].institute_id;activeRole="portal";showApp();return;
  }}
@@ -824,7 +834,7 @@ async function submitInstitute(event){
  }catch(e){toast("Institute error: "+(e.message||e));}
 }
 
-async function signOut(){if(sb)await sb.auth.signOut();user=null;activeInstitute="";institutes=[];rows={};portalMode=false;portalProfiles=[];$("appView").classList.add("hidden");$("loginView").classList.remove("hidden");}
+async function signOut(){if(sb)await sb.auth.signOut();user=null;activeInstitute="";institutes=[];rows={};portalMode=false;portalProfiles=[];portalSelectedIndex=0;isPlatformAdmin=false;$("appView").classList.add("hidden");$("loginView").classList.remove("hidden");}
 
 async function saveRecord(module,data,id=null){
  try{
