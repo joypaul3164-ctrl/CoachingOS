@@ -1612,10 +1612,26 @@ function showFeeHistory(id){
  $("modalRoot").innerHTML=`<div class="modal-back" onclick="if(event.target===this)closeModal()"><div class="modal">
   <div class="panel-head"><h3>পেমেন্ট ইতিহাস</h3><button class="btn ghost small" onclick="closeModal()">✕</button></div>
   <div class="notice">শিক্ষার্থী: <b>${esc(fee.student||"—")}</b> · মাস: <b>${esc(fee.month||"—")}</b> · মোট আদায়: ৳${money(fee.paid||0)}</div>
-  ${payments.length?'<div class="table-wrap"><table><thead><tr><th>তারিখ</th><th>পরিমাণ</th><th>মাধ্যম</th><th>রসিদ</th><th>নোট</th></tr></thead><tbody>'+payments.map(p=>'<tr><td>'+esc(p.date||"—")+'</td><td>৳'+money(p.amount||0)+'</td><td>'+esc(p.method||"—")+'</td><td>'+esc(p.receipt||"—")+'</td><td>'+esc(p.note||"—")+'</td></tr>').join("")+'</tbody></table></div>':'<div class="empty">এখনো কোনো পেমেন্ট জমা হয়নি।</div>'}
+  ${payments.length?'<div class="table-wrap"><table><thead><tr><th>তারিখ</th><th>পরিমাণ</th><th>মাধ্যম</th><th>রসিদ</th><th>নোট</th><th>রসিদ প্রিন্ট</th></tr></thead><tbody>'+payments.map((p,i)=>'<tr><td>'+esc(p.date||"—")+'</td><td>৳'+money(p.amount||0)+'</td><td>'+esc(p.method||"—")+'</td><td>'+esc(p.receipt||"—")+'</td><td>'+esc(p.note||"—")+'</td><td><button class="btn secondary small" onclick="printFeeReceipt(\''+esc(fee.id)+'\','+i+')">প্রিন্ট</button></td></tr>').join("")+'</tbody></table></div>':'<div class="empty">এখনো কোনো পেমেন্ট জমা হয়নি।</div>'}
   <div class="form-actions"><button class="btn" onclick="closeModal()">বন্ধ করুন</button></div>
  </div></div>`;
 }
+
+function printFeeReceipt(feeId,paymentIndex){
+ const fee=(rows.fees||[]).find(x=>String(x.id)===String(feeId));
+ if(!fee)return toast("ফি রেকর্ড পাওয়া যায়নি");
+ let payments=Array.isArray(fee.payments)?fee.payments:[];
+ if(!payments.length&&Number(fee.paid||0)>0)payments=[{amount:fee.paid,method:fee.method||"—",date:fee.date||"—",receipt:fee.receipt||""}];
+ const p=payments[paymentIndex];if(!p)return toast("পেমেন্ট পাওয়া যায়নি");
+ const paidBefore=payments.slice(0,paymentIndex+1).reduce((n,x)=>n+Number(x.amount||0),0);
+ const institute=institutes.find(x=>x.id===activeInstitute)?.name||"CoachingOS";
+ const w=window.open("","_blank","width=760,height=700");
+ if(!w)return toast("প্রিন্ট উইন্ডো খুলতে Browser popup অনুমতি দিন");
+ const safe=v=>String(v??"—").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+ w.document.write('<!doctype html><html lang="bn"><meta charset="utf-8"><title>Fee Receipt</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#172033}.receipt{max-width:650px;margin:auto;border:1px solid #dbe2ea;border-radius:12px;padding:28px}.head{text-align:center;border-bottom:1px solid #ddd;padding-bottom:16px}.row{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid #eee}.total{font-size:20px;font-weight:bold}.foot{margin-top:30px;color:#667085;font-size:12px;text-align:center}@media print{button{display:none}}</style><div class="receipt"><div class="head"><h2>'+safe(institute)+'</h2><h3>পেমেন্ট রসিদ</h3></div><div class="row"><span>শিক্ষার্থী</span><b>'+safe(fee.student)+'</b></div><div class="row"><span>ফি মাস</span><b>'+safe(fee.month)+'</b></div><div class="row"><span>তারিখ</span><b>'+safe(p.date)+'</b></div><div class="row"><span>রসিদ নম্বর</span><b>'+safe(p.receipt||"—")+'</b></div><div class="row"><span>পেমেন্ট মাধ্যম</span><b>'+safe(p.method)+'</b></div><div class="row total"><span>এই পেমেন্ট</span><b>৳'+money(p.amount)+'</b></div><div class="row"><span>এ পর্যন্ত মোট জমা</span><b>৳'+money(paidBefore)+'</b></div><div class="row"><span>বর্তমান বকেয়া</span><b>৳'+money(Math.max(0,Number(fee.amount||0)-paidBefore))+'</b></div><div class="foot">ধন্যবাদ। রসিদটি সংরক্ষণ করুন।<br><button onclick="window.print()">Print</button></div></div></html>');
+ w.document.close();
+}
+
 function renderReports(){
  const paid=sum("fees","paid");
  const due=sum("fees","due");
