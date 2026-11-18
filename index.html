@@ -492,6 +492,7 @@ tbody tr:hover{background:#f8faff}
    <div class="nav-label">FINANCE</div>
    <button data-page="fees" onclick="go('fees')"><span class="ico">৳</span><span data-en="Fees & Payments" data-bn="বেতন ও পেমেন্ট">Fees & Payments</span></button>
    <button data-page="expenses" onclick="go('expenses')"><span class="ico">↗</span><span data-en="Expenses" data-bn="খরচ">Expenses</span></button>
+   <button data-page="payroll" onclick="go('payroll')"><span class="ico">৳</span><span data-en="Payroll" data-bn="বেতন ব্যবস্থাপনা">Payroll</span></button>
    <button data-page="reports" onclick="go('reports')"><span class="ico">▥</span><span data-en="Reports" data-bn="রিপোর্ট">Reports</span></button>
    <button data-page="platform" id="platformNav" class="hidden" onclick="go('platform')"><span class="ico">✦</span><span>Platform Super Admin</span></button>
    <div class="nav-label">ADMINISTRATION</div>
@@ -596,6 +597,21 @@ const modules={
  ["method","পেমেন্ট মাধ্যম","Payment method","select",0,["Cash","Bank","Mobile Banking","Other"]],
  ["date","পেমেন্টের তারিখ","Payment date","date"],
  ["receipt","রসিদ নম্বর","Receipt no.","text"]
+ ]},
+ payroll:{title:"বেতন ব্যবস্থাপনা",en:"Payroll",icon:"৳",fields:[
+ ["employee","কর্মীর নাম","Employee name","text",1],
+ ["role","পদবি","Designation","select",0,["Teacher","Branch Manager","Accountant","Receptionist","Staff"]],
+ ["month","বেতনের মাস","Salary month","month",1],
+ ["base_salary","মূল বেতন (৳)","Base salary (৳)","number",1],
+ ["bonus","বোনাস (৳)","Bonus (৳)","number"],
+ ["deduction","কর্তন (৳)","Deduction (৳)","number"],
+ ["net_salary","নিট বেতন (৳)","Net salary (৳)","number"],
+ ["paid_amount","পরিশোধ (৳)","Paid amount (৳)","number"],
+ ["due","বকেয়া (৳)","Outstanding (৳)","number"],
+ ["payment_date","পরিশোধের তারিখ","Payment date","date"],
+ ["method","পেমেন্ট মাধ্যম","Payment method","select",0,["Cash","Bank","Mobile Banking","Other"]],
+ ["status","অবস্থা","Status","select",0,["Unpaid","Partial","Paid"]],
+ ["note","নোট","Note","text"]
  ]},
  expenses:{title:"খরচ",en:"Expenses",icon:"↗",fields:[
  ["title","খরচের বিবরণ","Expense title","text",1],
@@ -760,7 +776,7 @@ async function updateRecoveredPassword(){
 }
 function canWrite(module=null){
  if(["owner","admin","manager"].includes(activeRole))return true;
- const permissions={teacher:["batches","routine","attendance","exams"],accountant:["fees","expenses"],receptionist:["students","attendance","fees"],staff:[]};
+ const permissions={teacher:["batches","routine","attendance","exams"],accountant:["fees","expenses","payroll"],receptionist:["students","attendance","fees"],staff:[]};
  return module?((permissions[activeRole]||[]).includes(module)):false;
 }
 function canManageStaff(){return activeRole==="owner"||activeRole==="admin";}
@@ -1518,6 +1534,13 @@ async function submitForm(event,module){
   const amount=Number(data.amount||0);
   const paid=Number(data.paid||0);
   data.due=Math.max(0,amount-paid);
+ }
+ if(module==="payroll"){
+  const base=Number(data.base_salary||0),bonus=Number(data.bonus||0);
+  const deduction=Number(data.deduction||0),paid=Number(data.paid_amount||0);
+  data.net_salary=Math.max(0,base+bonus-deduction);
+  data.due=Math.max(0,data.net_salary-paid);
+  data.status=paid>=data.net_salary?"Paid":paid>0?"Partial":"Unpaid";
  }
 
  await saveRecord(module,data,editingId);
