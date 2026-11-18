@@ -488,6 +488,7 @@ tbody tr:hover{background:#f8faff}
    <button data-page="batches" onclick="go('batches')"><span class="ico">▤</span><span data-en="Batches & Subjects" data-bn="ব্যাচ ও বিষয়">Batches & Subjects</span></button>
    <button data-page="routine" onclick="go('routine')"><span class="ico">◷</span><span data-en="Class Routine" data-bn="ক্লাস রুটিন">Class Routine</span></button>
    <button data-page="attendance" onclick="go('attendance')"><span class="ico">✓</span><span data-en="Attendance" data-bn="উপস্থিতি">Attendance</span></button>
+   <button data-page="guardian_delivery" id="guardianDeliveryNav" class="hidden" onclick="go('guardian_delivery')"><span class="ico">✉</span><span>Guardian Delivery Logs</span></button>
    <button data-page="exams" onclick="go('exams')"><span class="ico">✎</span><span data-en="Exams & Results" data-bn="পরীক্ষা ও ফলাফল">Exams & Results</span></button>
    <div class="nav-label">FINANCE</div>
    <button data-page="fees" onclick="go('fees')"><span class="ico">৳</span><span data-en="Fees & Payments" data-bn="বেতন ও পেমেন্ট">Fees & Payments</span></button>
@@ -905,10 +906,16 @@ async function saveRecord(module,data,id=null){
     r=await sb.from(TABLE).update(payload)
      .eq("id",id).eq("institute_id",activeInstitute);
    }else{
-    r=await sb.from(TABLE).insert(payload);
+    r=await sb.from(TABLE).insert(payload).select("id").single();
    }
 
    if(r.error)return toast("Save error: "+r.error.message);
+   const savedRecordId=id||r.data?.id||null;
+   await loadAll();
+   if(module==="attendance"&&data.status==="Present"&&savedRecordId){
+    const delivery=await sb.functions.invoke("guardian-attendance-notify",{body:{attendance_id:savedRecordId}});
+    if(delivery.error)console.warn("Guardian delivery processing:",delivery.error.message);
+   }
    await loadAll();
   }else{
    if(id){
@@ -967,6 +974,7 @@ function showApp(){
   modeToggle.textContent=portalMode?"প্রতিষ্ঠান ড্যাশবোর্ড":"Student/Parent Portal";
  }
  $("platformNav")?.classList.toggle("hidden",!isPlatformAdmin);
+  $("guardianDeliveryNav")?.classList.toggle("hidden",portalMode||!cloud||!["owner","admin","manager","receptionist"].includes(activeRole));
  $("addInstituteTop").classList.toggle("hidden",portalMode||!cloud||activeRole!=="owner");
  $("notificationBell")?.classList.toggle("hidden",portalMode||!cloud);
  if(cloud&&!portalMode)refreshNotificationBadge();
