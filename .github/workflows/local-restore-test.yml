@@ -1,0 +1,74 @@
+name: Local Restore Test
+
+on:
+  push:
+    branches:
+      - feature/showcase-smart-exam-admission
+    paths:
+      - ".github/workflows/local-restore-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    name: Restore backup migrations into isolated local Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout workflow branch
+        uses: actions/checkout@v4
+
+      - name: Checkout preserved backup branch
+        uses: actions/checkout@v4
+        with:
+          ref: backup/pre-security-2026-11-18
+          path: backup-source
+          fetch-depth: 1
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Initialize disposable local Supabase project
+        shell: bash
+        run: |
+          mkdir -p restore-lab
+          cd restore-lab
+          supabase init
+          mkdir -p supabase/migrations
+          cp ../backup-source/supabase/migrations/*.sql supabase/migrations/
+          test "$(find supabase/migrations -maxdepth 1 -name '*.sql' | wc -l)" -eq 25
+
+      - name: Start isolated local Supabase stack
+        working-directory: restore-lab
+        run: supabase start
+
+      - name: Restore all preserved SQL migrations
+        working-directory: restore-lab
+        run: supabase db reset --local
+
+      - name: Verify restored database structure
+        working-directory: restore-lab
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          export PGPASSWORD=postgres
+          DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          TABLES=$(psql "$DB_URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'")
+          FUNCTIONS=$(psql "$DB_URL" -Atc "select count(*) from information_schema.routines where routine_schema='public' and routine_type='FUNCTION'")
+          RLS_TABLES=$(psql "$DB_URL" -Atc "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and c.relrowsecurity")
+          echo "Public tables: $TABLES"
+          echo "Public functions: $FUNCTIONS"
+          echo "RLS-enabled tables: $RLS_TABLES"
+          test "$TABLES" -gt 0
+          test "$FUNCTIONS" -gt 0
+          test "$RLS_TABLES" -gt 0
+
+      - name: Stop disposable local stack
+        if: always()
+        working-directory: restore-lab
+        run: supabase stop --no-backup
