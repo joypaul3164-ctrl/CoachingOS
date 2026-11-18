@@ -1,8 +1,7 @@
 -- Align Accountant payroll access across the UI and database RLS.
--- Accountant already has Payroll read/write controls in index.html.
--- This migration only expands that role's record-type allowlist; all other
--- role boundaries, active-institute checks, and tenant scoping remain intact.
--- Safe to rerun. Not deployed automatically.
+-- The existing database already grants Accountant payroll access; retain the
+-- subscription write gate and all current role/tenant checks if this migration
+-- is replayed on another environment. Not deployed automatically.
 
 create or replace function public.can_view_coachingos_records(
   _institute_id uuid,
@@ -41,20 +40,21 @@ stable
 security definer
 set search_path = ''
 as $$
-  select exists (
-    select 1
-    from public.institute_members m
-    join public.institutes i on i.id = m.institute_id
-    where m.institute_id = _institute_id
-      and m.user_id = (select auth.uid())
-      and i.status = 'active'
-      and (
-        m.role in ('owner','admin','manager')
-        or (m.role = 'teacher' and _record_type in ('batches','routine','attendance','exams'))
-        or (m.role = 'accountant' and _record_type in ('fees','expenses','payroll'))
-        or (m.role = 'receptionist' and _record_type in ('students','attendance','fees'))
-      )
-  );
+  select public.coachingos_subscription_write_allowed(_institute_id)
+    and exists (
+      select 1
+      from public.institute_members m
+      join public.institutes i on i.id = m.institute_id
+      where m.institute_id = _institute_id
+        and m.user_id = (select auth.uid())
+        and i.status = 'active'
+        and (
+          m.role in ('owner','admin','manager')
+          or (m.role = 'teacher' and _record_type in ('batches','routine','attendance','exams'))
+          or (m.role = 'accountant' and _record_type in ('fees','expenses','payroll'))
+          or (m.role = 'receptionist' and _record_type in ('students','attendance','fees'))
+        )
+    );
 $$;
 
 revoke all on function public.can_view_coachingos_records(uuid,text) from public;
