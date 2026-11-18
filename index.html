@@ -1412,6 +1412,13 @@ function renderModule(module){
    ${statCard("বকেয়া",money(list.reduce((n,x)=>n+Number(x.due||0),0)),"এখনো পরিশোধ হয়নি","◷")}
    ${statCard("রেকর্ড",list.length,"বেতন এন্ট্রি","▤")}
   </div>`:"";
+ const feeSummary=module==="fees"?`
+  <div class="grid" style="margin-bottom:14px">
+   ${statCard("মোট ধার্য",money(list.reduce((n,x)=>n+Number(x.amount||0),0)),"সব ফি রেকর্ড","৳")}
+   ${statCard("মোট আদায়",money(list.reduce((n,x)=>n+Number(x.paid||0),0)),"জমা হয়েছে","✓")}
+   ${statCard("মোট বকেয়া",money(list.reduce((n,x)=>n+Number(x.due||0),0)),"এখনো আদায় হয়নি","◷")}
+   ${statCard("ফি রেকর্ড",list.length,"শিক্ষার্থী ও মাস","▤")}
+  </div>`:"";
 
  $("content").innerHTML=`
  <div class="welcome">
@@ -1423,6 +1430,7 @@ function renderModule(module){
  </div>
 
  ${payrollSummary}
+ ${feeSummary}
  <div class="panel">
   <div class="toolbar">
    <input class="search" id="${searchId}" placeholder="${t("নাম বা তথ্য দিয়ে খুঁজুন...","Search records...")}" oninput="filterTable('${module}',this.value)">
@@ -1453,6 +1461,10 @@ function moduleTable(module,list){
      return `<td>${esc(val)}</td>`;
     }).join("")}
     <td>
+     ${module==="fees"?`
+      <button class="btn good small" onclick="openFeePayment('${esc(x.id)}')" ${Number(x.due||0)<=0||!canWrite("fees")?"disabled":""}>পেমেন্ট নিন</button>
+      <button class="btn secondary small" onclick="showFeeHistory('${esc(x.id)}')">ইতিহাস</button>
+     `: ""}
      ${canWrite(module)?`
       <button class="btn secondary small" onclick="openForm('${module}','${esc(x.id)}')">Edit</button>
       <button class="btn danger small" onclick="deleteRecord('${module}','${esc(x.id)}')">Delete</button>
@@ -1541,7 +1553,12 @@ async function submitForm(event,module){
  if(module==="fees"){
   const amount=Number(data.amount||0);
   const paid=Number(data.paid||0);
+  if(amount<0||paid<0||paid>amount)return toast("ফি বা জমার পরিমাণ সঠিক নয়");
   data.due=Math.max(0,amount-paid);
+  const existing=editingId?(rows.fees||[]).find(x=>String(x.id)===String(editingId)):null;
+  if(existing?.payments) data.payments=existing.payments;
+  else if(!existing&&paid>0) data.payments=[{amount:paid,method:data.method||"Other",date:data.date||new Date().toISOString().slice(0,10),receipt:data.receipt||"",note:"প্রাথমিক জমা",created_at:new Date().toISOString()}];
+  else data.payments=data.payments||[];
  }
  if(module==="payroll"){
   const base=Number(data.base_salary||0),bonus=Number(data.bonus||0);
@@ -1554,6 +1571,51 @@ async function submitForm(event,module){
  await saveRecord(module,data,editingId);
 }
 
+function openFeePayment(id){
+ if(!canWrite("fees"))return toast("আপনার অনুমতি নেই");
+ const fee=(rows.fees||[]).find(x=>String(x.id)===String(id));
+ if(!fee)return toast("ফি রেকর্ড পাওয়া যায়নি");
+ const due=Math.max(0,Number(fee.due||0));
+ if(due<=0)return toast("এই ফি সম্পূর্ণ পরিশোধিত");
+ $("modalRoot").innerHTML=`
+ <div class="modal-back" onclick="if(event.target===this)closeModal()"><div class="modal">
+  <div class="panel-head"><h3>শিক্ষার্থীর পেমেন্ট গ্রহণ</h3><button class="btn ghost small" onclick="closeModal()">✕</button></div>
+  <div class="notice">শিক্ষার্থী: <b>${esc(fee.student||"—")}</b> · মাস: <b>${esc(fee.month||"—")}</b><br>মোট ফি: ৳${money(fee.amount)} · আগে জমা: ৳${money(fee.paid)} · বকেয়া: <b>৳${money(due)}</b></div>
+  <form onsubmit="submitFeePayment(event,'${esc(fee.id)}')"><div class="form-grid">
+   <div class="field"><label>এখন জমা (৳) *</label><input id="feePayAmount" type="number" min="1" max="${due}" step="0.01" required></div>
+   <div class="field"><label>তারিখ *</label><input id="feePayDate" type="date" value="${new Date().toISOString().slice(0,10)}" required></div>
+   <div class="field"><label>পেমেন্ট মাধ্যম *</label><select id="feePayMethod" required><option value="">Select</option><option>Cash</option><option>Bank</option><option>Mobile Banking</option><option>Other</option></select></div>
+   <div class="field"><label>রসিদ নম্বর</label><input id="feePayReceipt" maxlength="60" placeholder="ঐচ্ছিক"></div>
+   <div class="field wide"><label>নোট</label><input id="feePayNote" maxlength="200" placeholder="ঐচ্ছিক"></div>
+  </div><div class="form-actions"><button type="button" class="btn ghost" onclick="closeModal()">বাতিল</button><button class="btn" type="submit">পেমেন্ট সংরক্ষণ</button></div></form>
+ </div></div>`;
+}
+async function submitFeePayment(event,id){
+ event.preventDefault();
+ if(!canWrite("fees"))return toast("আপনার অনুমতি নেই");
+ const fee=(rows.fees||[]).find(x=>String(x.id)===String(id));if(!fee)return toast("ফি রেকর্ড পাওয়া যায়নি");
+ const amount=Number($("feePayAmount").value),due=Math.max(0,Number(fee.due||0));
+ const method=$("feePayMethod").value,date=$("feePayDate").value;
+ if(!Number.isFinite(amount)||amount<=0||amount>due)return toast("জমার পরিমাণ বকেয়ার বেশি বা শূন্য হতে পারবে না");
+ if(!method||!date)return toast("তারিখ ও পেমেন্ট মাধ্যম নির্বাচন করুন");
+ const payments=Array.isArray(fee.payments)?[...fee.payments]:[];
+ payments.push({amount,method,date,receipt:$("feePayReceipt").value.trim(),note:$("feePayNote").value.trim(),created_at:new Date().toISOString()});
+ const paid=Number(fee.paid||0)+amount;
+ const data={...fee,paid,due:Math.max(0,Number(fee.amount||0)-paid),payments,method,date,receipt:$("feePayReceipt").value.trim()};
+ delete data.id;delete data._created_at;
+ await saveRecord("fees",data,fee.id);
+}
+function showFeeHistory(id){
+ const fee=(rows.fees||[]).find(x=>String(x.id)===String(id));if(!fee)return toast("ফি রেকর্ড পাওয়া যায়নি");
+ let payments=Array.isArray(fee.payments)?fee.payments:[];
+ if(!payments.length&&Number(fee.paid||0)>0)payments=[{amount:fee.paid,method:fee.method||"—",date:fee.date||"—",receipt:fee.receipt||"",note:"আগের রেকর্ডের জমা (বিস্তারিত ইতিহাস সংরক্ষিত ছিল না)"}];
+ $("modalRoot").innerHTML=`<div class="modal-back" onclick="if(event.target===this)closeModal()"><div class="modal">
+  <div class="panel-head"><h3>পেমেন্ট ইতিহাস</h3><button class="btn ghost small" onclick="closeModal()">✕</button></div>
+  <div class="notice">শিক্ষার্থী: <b>${esc(fee.student||"—")}</b> · মাস: <b>${esc(fee.month||"—")}</b> · মোট আদায়: ৳${money(fee.paid||0)}</div>
+  ${payments.length?'<div class="table-wrap"><table><thead><tr><th>তারিখ</th><th>পরিমাণ</th><th>মাধ্যম</th><th>রসিদ</th><th>নোট</th></tr></thead><tbody>'+payments.map(p=>'<tr><td>'+esc(p.date||"—")+'</td><td>৳'+money(p.amount||0)+'</td><td>'+esc(p.method||"—")+'</td><td>'+esc(p.receipt||"—")+'</td><td>'+esc(p.note||"—")+'</td></tr>').join("")+'</tbody></table></div>':'<div class="empty">এখনো কোনো পেমেন্ট জমা হয়নি।</div>'}
+  <div class="form-actions"><button class="btn" onclick="closeModal()">বন্ধ করুন</button></div>
+ </div></div>`;
+}
 function renderReports(){
  const paid=sum("fees","paid");
  const due=sum("fees","due");
