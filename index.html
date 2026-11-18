@@ -1405,6 +1405,13 @@ function renderModule(module){
 
  const list=rows[module]||[];
  const searchId="search_"+module;
+ const payrollSummary=module==="payroll"?`
+  <div class="grid" style="margin-bottom:14px">
+   ${statCard("মোট নিট বেতন",money(list.reduce((n,x)=>n+Number(x.net_salary||0),0)),"এই তালিকার সব মাস","৳")}
+   ${statCard("পরিশোধিত",money(list.reduce((n,x)=>n+Number(x.paid_amount||0),0)),"মোট দেওয়া হয়েছে","✓")}
+   ${statCard("বকেয়া",money(list.reduce((n,x)=>n+Number(x.due||0),0)),"এখনো পরিশোধ হয়নি","◷")}
+   ${statCard("রেকর্ড",list.length,"বেতন এন্ট্রি","▤")}
+  </div>`:"";
 
  $("content").innerHTML=`
  <div class="welcome">
@@ -1415,6 +1422,7 @@ function renderModule(module){
   ${canWrite(module)?`<button class="btn" onclick="openForm('${module}')">＋ ${t("নতুন যোগ করুন","Add New")}</button>`:""}
  </div>
 
+ ${payrollSummary}
  <div class="panel">
   <div class="toolbar">
    <input class="search" id="${searchId}" placeholder="${t("নাম বা তথ্য দিয়ে খুঁজুন...","Search records...")}" oninput="filterTable('${module}',this.value)">
@@ -1549,7 +1557,8 @@ async function submitForm(event,module){
 function renderReports(){
  const paid=sum("fees","paid");
  const due=sum("fees","due");
- const expense=sum("expenses","amount");
+ const expense=sum("expenses","amount")+sum("payroll","paid_amount");
+ const payrollDue=sum("payroll","due");
  const studentCount=(rows.students||[]).length;
  const present=(rows.attendance||[]).filter(x=>x.status==="Present").length;
  const absent=(rows.attendance||[]).filter(x=>x.status==="Absent").length;
@@ -1579,7 +1588,8 @@ function renderReports(){
    <h3>${t("আর্থিক হিসাব","Financial Summary")}</h3>
    <p>${t("আদায়","Collected")}: <b>${money(paid)}</b></p>
    <p>${t("বকেয়া","Due")}: <b>${money(due)}</b></p>
-   <p>${t("খরচ","Expenses")}: <b>${money(expense)}</b></p>
+   <p>${t("অন্যান্য খরচ ও পরিশোধিত বেতন","Expenses + payroll paid")}: <b>${money(expense)}</b></p>
+   <p>${t("বেতন বকেয়া","Payroll outstanding")}: <b>${money(payrollDue)}</b></p>
    <p>${t("নিট হিসাব","Net")}: <b>${money(paid-expense)}</b></p>
   </div>
  </div>
