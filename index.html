@@ -536,7 +536,7 @@ const modules={
  ["guardian_relation","অভিভাবকের সম্পর্ক","Guardian relation","select",0,["Father","Mother","Guardian","Other"]],
  ["guardian_phone","অভিভাবকের WhatsApp নম্বর","Guardian WhatsApp number","tel"],
  ["guardian_email","অভিভাবকের Gmail / Email","Guardian Gmail / Email","email"],
- ["guardian_report_consent","রিপোর্ট পাঠানোর সম্মতি","Consent to receive reports","select",0,["Yes","No","Pending"]],
+ ["guardian_report_consent","SMS নোটিফিকেশন সম্মতি","Consent to receive SMS notifications","select",0,["Yes","No","Pending"]],
  ["class_name","শ্রেণি","Class","text"],
  ["batch","ব্যাচ","Batch","text"],
  ["roll","রোল","Roll number","text"],
@@ -1788,12 +1788,12 @@ async function renderGuardianDelivery(){
  const logs=r.data||[];
  const count=function(status){return logs.filter(x=>x.status===status).length;};
  const labels={queued:"অপেক্ষমাণ",processing:"প্রক্রিয়াধীন",sent:"Provider গ্রহণ করেছে",failed:"ব্যর্থ",blocked:"Provider সেটআপ বাকি",skipped_consent:"সম্মতি নেই",skipped_no_contact:"যোগাযোগ নেই"};
- let html='<div class="welcome"><div><h1>Guardian Delivery Logs</h1><div class="muted">সর্বশেষ ১০০টি SMS ও Email delivery event</div></div><button class="btn secondary small" onclick="renderGuardianDelivery()">Refresh</button></div>';
- html+='<div class="notice">নোট: Provider গ্রহণ করেছে মানে Email/SMS provider অনুরোধ গ্রহণ করেছে; অভিভাবকের inbox বা ফোনে পৌঁছানো নিশ্চিত নয়। Delivery webhook যুক্ত না হওয়া পর্যন্ত চূড়ান্ত delivery status নিশ্চিত করা যাবে না।</div>';
+ let html='<div class="welcome"><div><h1>Guardian Delivery Logs</h1><div class="muted">সর্বশেষ ১০০টি SMS delivery event (Email আপাতত বন্ধ)</div></div><button class="btn secondary small" onclick="renderGuardianDelivery()">Refresh</button></div>';
+ html+='<div class="notice">নোট: Provider গ্রহণ করেছে মানে SMS Provider অনুরোধ গ্রহণ করেছে; অভিভাবকের ফোনে পৌঁছানো নিশ্চিত নয়। Provider delivery receipt যুক্ত না হওয়া পর্যন্ত চূড়ান্ত delivery status নিশ্চিত করা যাবে না। Email notification আপাতত বন্ধ।</div>';
  html+='<div class="grid">'+statCard("Provider গ্রহণ করেছে",count("sent"),"API accepted; inbox delivery unverified","✓")+statCard("ব্যর্থ",count("failed"),"Provider error","!")+statCard("অপেক্ষমাণ",count("queued"),"Queue-তে আছে","◷")+statCard("Provider সেটআপ বাকি",count("blocked"),"Configuration প্রয়োজন","⚙")+'</div>';
  html+='<div class="panel"><div class="table-wrap"><table><thead><tr><th>সময়</th><th>Channel</th><th>প্রাপক</th><th>Status</th><th>Provider / Error</th><th>Attempts</th><th>Action</th></tr></thead><tbody>';
  if(!logs.length)html+='<tr><td colspan="7">এখনো কোনো delivery record নেই।</td></tr>';
-  logs.forEach(function(x){const action=(["failed","blocked"].includes(x.status)&&Number(x.attempt_count)<3)?'<button class="btn secondary small" data-id="'+esc(x.id)+'" onclick="retryGuardianDelivery(this.dataset.id)">Retry</button>':"—";html+='<tr><td>'+esc(new Date(x.created_at).toLocaleString())+'</td><td>'+(x.channel==="email"?"Email":"SMS")+'</td><td>'+esc(x.recipient_masked||"—")+'</td><td><span class="tag '+(x.status==="sent"?"green":(["failed","blocked"].includes(x.status)?"red":""))+'">'+esc(labels[x.status]||x.status)+'</span></td><td>'+esc(x.provider||"—")+(x.error_message?'<br><small>'+esc(x.error_message)+'</small>':"")+'</td><td>'+esc(x.attempt_count)+'</td><td>'+action+'</td></tr>';});
+  logs.forEach(function(x){const action=(x.channel==="sms"&&["failed","blocked"].includes(x.status)&&Number(x.attempt_count)<3)?'<button class="btn secondary small" data-id="'+esc(x.id)+'" onclick="retryGuardianDelivery(this.dataset.id)">Retry</button>':"—";html+='<tr><td>'+esc(new Date(x.created_at).toLocaleString())+'</td><td>'+(x.channel==="email"?"Email":"SMS")+'</td><td>'+esc(x.recipient_masked||"—")+'</td><td><span class="tag '+(x.status==="sent"?"green":(["failed","blocked"].includes(x.status)?"red":""))+'">'+esc(labels[x.status]||x.status)+'</span></td><td>'+esc(x.provider||"—")+(x.error_message?'<br><small>'+esc(x.error_message)+'</small>':"")+'</td><td>'+esc(x.attempt_count)+'</td><td>'+action+'</td></tr>';});
  html+='</tbody></table></div></div>';
  $("content").innerHTML=html;
 }
