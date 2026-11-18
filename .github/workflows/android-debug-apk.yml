@@ -1,0 +1,80 @@
+name: Build CoachingOS Android Debug APK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Chochings"
+      - "capacitor.config.json"
+      - ".github/workflows/android-debug-apk.yml"
+      - "assets/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coachingos-android-debug
+  cancel-in-progress: true
+
+jobs:
+  build-debug-apk:
+    name: Build installable debug APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Prepare local web app bundle
+        run: |
+          mkdir -p www/assets
+          cp Chochings www/index.html
+          cp assets/coachingos-icon.svg www/assets/coachingos-icon.svg
+          cp manifest.webmanifest www/manifest.webmanifest
+          cp sw.js www/sw.js
+
+      - name: Install Capacitor
+        run: |
+          npm init -y
+          npm install --no-audit --no-fund @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+
+      - name: Generate Android project
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Verify APK exists
+        run: |
+          test -s android/app/build/outputs/apk/debug/app-debug.apk
+          ls -lh android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoachingOS-Android-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
