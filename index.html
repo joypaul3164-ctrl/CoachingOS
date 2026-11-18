@@ -668,6 +668,13 @@ th{background:#eff8f7;color:#52717c}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 
 </style>
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="./assets/coachingos-icon.svg">
+<link rel="apple-touch-icon" href="./assets/coachingos-icon.svg">
 </head>
 <body>
 
@@ -2218,6 +2225,15 @@ if (loginButton) {
  console.error("CoachingOS: login button element was not found.");
 }
 boot();
+</script>
+
+<script>
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js", { scope: "./" })
+      .catch(error => console.warn("CoachingOS offline shell registration failed:", error));
+  });
+}
 </script>
 </body>
 </html>
