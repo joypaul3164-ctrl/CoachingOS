@@ -51,8 +51,11 @@ jobs:
           assert.match(submit, /pass<0\|\|pass>total/, 'Exam plan pass marks must be within total marks');
 
           const permissions = section('function canWrite(module=null){', 'function saveLocal');
-          assert.match(permissions, /admissions/);
-          assert.match(permissions, /exam_plans/);
+          assert.match(permissions, /\["owner","admin","manager"\]/, "Owner/admin/manager can manage restricted modules");
+          assert.match(permissions, /teacher:\["batches","routine","attendance","exams"\]/, "Teacher role is limited to teaching modules");
+          assert.match(permissions, /accountant:\["fees","expenses","payroll"\]/, "Accountant role is limited to finance modules");
+          assert.match(permissions, /receptionist:\["students","attendance","fees"\]/, "Receptionist role is limited to front-desk modules");
+          assert.doesNotMatch(permissions, /admissions|exam_plans/, "Restricted modules are not granted to non-manager staff roles");
 
           console.log('PASS: admission approval gate, duplicate guard, retry-safe linkage, exam bounds, grade/result calculation, and permission checks are present.');
           JS
