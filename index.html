@@ -1203,12 +1203,15 @@ async function enrollAdmission(id){
  if(!canWrite("admissions")||!canWrite("students"))return toast("ভর্তি অনুমোদন ও শিক্ষার্থী তৈরির অনুমতি প্রয়োজন");
  const app=(rows.admissions||[]).find(x=>String(x.id)===String(id));
  if(!app||app.status!=="Approved")return toast("শুধু Approved আবেদন এনরোল করা যাবে");
- const duplicate=(rows.students||[]).some(x=>String(x.phone||"").trim()===String(app.phone||"").trim()&&String(x.name||"").trim().toLowerCase()===String(app.name||"").trim().toLowerCase());
+ const linkedStudent=(rows.students||[]).find(x=>String(x.admission_application_id||"")===String(app.id));
+ const duplicate=(rows.students||[]).some(x=>String(x.phone||"").trim()===String(app.phone||"").trim()&&String(x.name||"").trim().toLowerCase()===String(app.name||"").trim().toLowerCase()&&String(x.admission_application_id||"")!==String(app.id));
  if(duplicate)return toast("একই নাম ও মোবাইল নম্বরের শিক্ষার্থী আগে থেকেই আছে");
  const student={name:app.name,phone:app.phone,guardian:app.guardian||"",guardian_phone:app.guardian_phone||"",class_name:app.class_name||"",admission_date:app.applied_date||new Date().toISOString().slice(0,10),status:"Active",admission_application_id:app.id};
  try{
-  const created=await saveRecord("students",student);
-  if(created!==true)return;
+  if(!linkedStudent){
+   const created=await saveRecord("students",student);
+   if(created!==true)return;
+  }
   const updated={...app,status:"Enrolled"};
   const marked=await saveRecord("admissions",updated,app.id);
   if(marked!==true)return;
