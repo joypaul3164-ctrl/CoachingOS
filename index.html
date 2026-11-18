@@ -505,7 +505,7 @@ tbody tr:hover{background:#f8faff}
  <main class="main">
   <header class="topbar">
    <div style="display:flex;align-items:center;gap:10px"><button class="btn ghost mobile-menu" onclick="$('sidebar').classList.toggle('open')">☰</button><div class="crumb" id="pageTitle">Dashboard</div></div>
-   <div class="top-actions"><select id="instituteSelect" class="branch-select" onchange="switchInstitute(this.value)" title="Institute"></select><button class="btn ghost small hidden" id="notificationBell" onclick="openNotificationCenter()" title="Notifications">🔔 <span id="notificationCount" class="notification-count">0</span></button><button class="btn secondary small hidden" id="addInstituteTop" onclick="addInstitute()">＋ নতুন প্রতিষ্ঠান</button><span class="pill" id="connectionState">LOCAL MODE</span><button class="btn ghost small" onclick="toggleLanguage()" id="langBtn">বাংলা</button><div class="avatar" id="avatar">A</div><button class="btn ghost small" onclick="signOut()">Logout</button></div>
+   <div class="top-actions"><select id="instituteSelect" class="branch-select" onchange="switchInstitute(this.value)" title="Institute"></select><button class="btn secondary small hidden" id="portalModeToggle" onclick="togglePortalMode()">Student/Parent Portal</button><button class="btn ghost small hidden" id="notificationBell" onclick="openNotificationCenter()" title="Notifications">🔔 <span id="notificationCount" class="notification-count">0</span></button><button class="btn secondary small hidden" id="addInstituteTop" onclick="addInstitute()">＋ নতুন প্রতিষ্ঠান</button><span class="pill" id="connectionState">LOCAL MODE</span><button class="btn ghost small" onclick="toggleLanguage()" id="langBtn">বাংলা</button><div class="avatar" id="avatar">A</div><button class="btn ghost small" onclick="signOut()">Logout</button></div>
   </header>
   <div class="content" id="content"></div>
  </main>
@@ -813,22 +813,55 @@ async function afterAuth(){
  isPlatformAdmin=false;
  try{
   const adminCheck=await sb.rpc("is_coachingos_super_admin");
-  isPlatformAdmin=!adminCheck.error&&adminCheck.data===true;const m=await sb.from("institute_members").select("institute_id,role").eq("user_id",user.id);if(m.error)throw m.error;institutes=[];portalMode=false;portalProfiles=[];if(!(m.data||[]).length){const portal=await sb.rpc("get_coachingos_portal_dashboard");if(portal.error)throw portal.error;if(Array.isArray(portal.data)&&portal.data.length){
-  if(portal.data.some(p=>!p.linked_user_id||p.linked_user_id!==user.id)){
+  isPlatformAdmin=!adminCheck.error&&adminCheck.data===true;
+  const m=await sb.from("institute_members").select("institute_id,role").eq("user_id",user.id);
+  if(m.error)throw m.error;
+
+  const portal=await sb.rpc("get_coachingos_portal_dashboard");
+  if(portal.error)throw portal.error;
+  portalProfiles=Array.isArray(portal.data)?portal.data:[];
+  if(portalProfiles.some(p=>!p.linked_user_id||p.linked_user_id!==user.id)){
    portalProfiles=[];portalMode=false;await sb.auth.signOut();user=null;
    throw new Error("Portal account verification failed. No student data was displayed. Please contact the institute administrator.");
   }
-  if(portal.data.length>1&&portal.data.some(p=>p.relationship==="student")){
+  if(portalProfiles.length>1&&portalProfiles.some(p=>p.relationship==="student")){
    portalProfiles=[];portalMode=false;await sb.auth.signOut();user=null;
    throw new Error("Student account has multiple or mixed profile links. Access was blocked for privacy. Ask the institute to correct the links.");
   }
-  portalMode=true;portalProfiles=portal.data;portalSelectedIndex=0;activeInstitute=portalProfiles[0].institute_id;activeRole="portal";showApp();return;
- }}
- for(const x of (m.data||[])){const q=await sb.from("institutes").select("id,name,institute_type,metadata").eq("id",x.institute_id).maybeSingle();if(q.error)throw q.error;if(q.data)institutes.push(q.data);}
- if(!institutes.length){const q=await sb.from("institutes").insert({name:(user.email||"My")+" Institute",owner_id:user.id,institute_type:"coaching"}).select("id,name,institute_type,metadata").single();if(q.error)throw q.error;const a=await sb.from("institute_members").insert({institute_id:q.data.id,user_id:user.id,role:"owner"});if(a.error)throw a.error;institutes=[q.data];activeRole="owner";}else activeRole=m.data[0].role||"owner";
- if(!institutes.some(x=>x.id===activeInstitute))activeInstitute=institutes[0].id;await loadAll();showApp();}
- catch(e){toast("Account setup error: "+(e.message||e));}
+
+  institutes=[];
+  for(const x of (m.data||[])){
+   const q=await sb.from("institutes").select("id,name,institute_type,metadata").eq("id",x.institute_id).maybeSingle();
+   if(q.error)throw q.error;
+   if(q.data)institutes.push(q.data);
+  }
+
+  if(!institutes.length&&portalProfiles.length){
+   portalMode=true;portalSelectedIndex=0;activeInstitute=portalProfiles[0].institute_id;activeRole="portal";
+   showApp();return;
+  }
+  if(!institutes.length){
+   const q=await sb.from("institutes").insert({name:(user.email||"My")+" Institute",owner_id:user.id,institute_type:"coaching"}).select("id,name,institute_type,metadata").single();
+   if(q.error)throw q.error;
+   const a=await sb.from("institute_members").insert({institute_id:q.data.id,user_id:user.id,role:"owner"});
+   if(a.error)throw a.error;
+   institutes=[q.data];activeRole="owner";
+  }else{
+   activeRole=m.data[0].role||"owner";
+  }
+  if(!institutes.some(x=>x.id===activeInstitute))activeInstitute=institutes[0].id;
+  portalMode=false;
+  await loadAll();
+  showApp();
+ }catch(e){toast("Account setup error: "+(e.message||e));}
 }
+function togglePortalMode(){
+ if(!portalProfiles.length||!institutes.length)return;
+ portalMode=!portalMode;
+ if(!portalMode&&!institutes.some(x=>x.id===activeInstitute))activeInstitute=institutes[0].id;
+ showApp();
+}
+
 async function switchInstitute(id){
  if(!institutes.some(x=>x.id===id))return;activeInstitute=id;const r=await sb.from("institute_members").select("role").eq("institute_id",id).eq("user_id",user.id).maybeSingle();if(!r.error)activeRole=r.data?.role||"owner";try{await loadAll();showApp();}catch(e){toast("Load error: "+e.message);}
 }
@@ -925,6 +958,11 @@ function showApp(){
  ).join("");
 
  $("instituteSelect").classList.toggle("hidden",portalMode||institutes.length===0);
+ const modeToggle=$("portalModeToggle");
+ if(modeToggle){
+  modeToggle.classList.toggle("hidden",!portalProfiles.length||!institutes.length);
+  modeToggle.textContent=portalMode?"প্রতিষ্ঠান ড্যাশবোর্ড":"Student/Parent Portal";
+ }
  $("platformNav")?.classList.toggle("hidden",!isPlatformAdmin);
  $("addInstituteTop").classList.toggle("hidden",portalMode||!cloud||activeRole!=="owner");
  $("notificationBell")?.classList.toggle("hidden",portalMode||!cloud);
