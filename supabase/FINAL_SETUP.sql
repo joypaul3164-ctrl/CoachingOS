@@ -452,3 +452,40 @@ revoke all on function public.mark_all_coachingos_notifications_read(uuid) from 
 grant execute on function public.get_coachingos_notifications(uuid) to authenticated;
 grant execute on function public.get_coachingos_unread_notification_count(uuid) to authenticated;
 grant execute on function public.mark_all_coachingos_notifications_read(uuid) to authenticated;
+
+-- Narrow student selector for Teacher, Accountant and other operational roles.
+-- Returns only id/name/roll/class/batch; no contact, guardian or address fields.
+create or replace function public.get_coachingos_student_options(_institute_id uuid)
+returns table(id uuid, name text, roll text, class_name text, batch text)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if (select auth.uid()) is null then
+    raise exception 'Authentication required' using errcode = '42501';
+  end if;
+  return query
+  select
+    r.id,
+    coalesce(r.record_data->>'name',''),
+    coalesce(r.record_data->>'roll',''),
+    coalesce(r.record_data->>'class_name',''),
+    coalesce(r.record_data->>'batch','')
+  from public.coachingos_records r
+  join public.institutes i on i.id = r.institute_id and i.status = 'active'
+  where r.institute_id = _institute_id
+    and r.record_type = 'students'
+    and exists (
+      select 1 from public.institute_members m
+      where m.institute_id = _institute_id
+        and m.user_id = (select auth.uid())
+        and m.role in ('owner','admin','manager','teacher','accountant','receptionist')
+    )
+  order by r.record_data->>'name';
+end;
+$$;
+
+revoke all on function public.get_coachingos_student_options(uuid) from public, anon;
+grant execute on function public.get_coachingos_student_options(uuid) to authenticated;
