@@ -911,7 +911,6 @@ async function saveRecord(module,data,id=null){
 
    if(r.error)return toast("Save error: "+r.error.message);
    const savedRecordId=id||r.data?.id||null;
-   await loadAll();
    if(module==="attendance"&&data.status==="Present"&&savedRecordId){
     const delivery=await sb.functions.invoke("guardian-attendance-notify",{body:{attendance_id:savedRecordId}});
     if(delivery.error)console.warn("Guardian delivery processing:",delivery.error.message);
@@ -1769,13 +1768,31 @@ function renderSettings(){
  </div>`;
 }
 
+async function renderGuardianDelivery(){
+ if(!cloud||!activeInstitute){$("content").innerHTML='<div class="notice">Cloud connection প্রয়োজন।</div>';return;}
+ $("content").innerHTML='<div class="welcome"><h1>Guardian Delivery Logs</h1><button class="btn secondary small" onclick="renderGuardianDelivery()">Refresh</button></div><div class="panel">Loading...</div>';
+ const r=await sb.from("guardian_delivery_logs").select("id,created_at,channel,recipient_masked,status,provider,error_message,attempt_count,sent_at").eq("institute_id",activeInstitute).order("created_at",{ascending:false}).limit(100);
+ if(r.error){$("content").innerHTML='<div class="notice">Log load failed: '+esc(r.error.message)+'</div>';return;}
+ const logs=r.data||[];
+ const count=function(status){return logs.filter(x=>x.status===status).length;};
+ const labels={queued:"অপেক্ষমাণ",processing:"পাঠানো হচ্ছে",sent:"পাঠানো হয়েছে",failed:"ব্যর্থ",blocked:"Provider সেটআপ বাকি",skipped_consent:"সম্মতি নেই",skipped_no_contact:"যোগাযোগ নেই"};
+ let html='<div class="welcome"><div><h1>Guardian Delivery Logs</h1><div class="muted">সর্বশেষ ১০০টি SMS ও Email delivery event</div></div><button class="btn secondary small" onclick="renderGuardianDelivery()">Refresh</button></div>';
+ html+='<div class="grid">'+statCard("পাঠানো হয়েছে",count("sent"),"সফল delivery","✓")+statCard("ব্যর্থ",count("failed"),"Provider error","!")+statCard("অপেক্ষমাণ",count("queued"),"Queue-তে আছে","◷")+statCard("Provider সেটআপ বাকি",count("blocked"),"Configuration প্রয়োজন","⚙")+'</div>';
+ html+='<div class="panel"><div class="table-wrap"><table><thead><tr><th>সময়</th><th>Channel</th><th>প্রাপক</th><th>Status</th><th>Provider / Error</th><th>Attempts</th></tr></thead><tbody>';
+ if(!logs.length)html+='<tr><td colspan="6">এখনো কোনো delivery record নেই।</td></tr>';
+ logs.forEach(function(x){html+='<tr><td>'+esc(new Date(x.created_at).toLocaleString())+'</td><td>'+(x.channel==="email"?"Email":"SMS")+'</td><td>'+esc(x.recipient_masked||"—")+'</td><td><span class="tag '+(x.status==="sent"?"green":(["failed","blocked"].includes(x.status)?"red":""))+'">'+esc(labels[x.status]||x.status)+'</span></td><td>'+esc(x.provider||"—")+(x.error_message?'<br><small>'+esc(x.error_message)+'</small>':"")+'</td><td>'+esc(x.attempt_count)+'</td></tr>';});
+ html+='</tbody></table></div></div>';
+ $("content").innerHTML=html;
+}
+
+
 function render(){
  if(portalMode)return renderPortalDashboard();
  const titles={
   platform:["Platform Super Admin","Platform Super Admin"],
   dashboard:["ড্যাশবোর্ড","Dashboard"],
   reports:["রিপোর্ট","Reports"],
-  settings:["সেটিংস ও ব্যাকআপ","Settings & Backup"]
+  settings:["সেটিংস ও ব্যাকআপ","Settings & Backup"], guardian_delivery:["গার্জেন SMS / Email লগ","Guardian Delivery Logs"]
  };
 
  $("pageTitle").textContent=t(...(titles[currentPage]||[
@@ -1788,6 +1805,7 @@ function render(){
  if(currentPage==="dashboard")return renderDashboard();
  if(currentPage==="reports")return renderReports();
  if(currentPage==="settings")return renderSettings();
+  if(currentPage==="guardian_delivery")return renderGuardianDelivery();
  if(modules[currentPage])return renderModule(currentPage);
 }
 
