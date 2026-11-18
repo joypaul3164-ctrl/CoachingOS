@@ -59,6 +59,7 @@ jobs:
 
       - name: Generate Android project
         run: |
+          rm -rf android
           npx cap add android
           npx cap sync android
 
