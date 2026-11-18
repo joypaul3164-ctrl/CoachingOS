@@ -911,6 +911,7 @@ async function saveRecord(module,data,id=null){
 
    if(r.error)return toast("Save error: "+r.error.message);
    const savedRecordId=id||r.data?.id||null;
+   await loadAll();
    if(module==="attendance"&&data.status==="Present"&&savedRecordId){
     const delivery=await sb.functions.invoke("guardian-attendance-notify",{body:{attendance_id:savedRecordId}});
     if(delivery.error)console.warn("Guardian delivery processing:",delivery.error.message);
@@ -1768,6 +1769,16 @@ function renderSettings(){
  </div>`;
 }
 
+async function retryGuardianDelivery(logId){
+ try{
+  const r=await sb.rpc("retry_coachingos_guardian_delivery",{_log_id:logId});
+  if(r.error)throw r.error;
+  const delivery=await sb.functions.invoke("guardian-attendance-notify",{body:{attendance_id:r.data}});
+  if(delivery.error)throw delivery.error;
+  toast("Retry request processed");await renderGuardianDelivery();
+ }catch(e){toast("Retry failed: "+(e.message||e));}
+}
+
 async function renderGuardianDelivery(){
  if(!cloud||!activeInstitute){$("content").innerHTML='<div class="notice">Cloud connection প্রয়োজন।</div>';return;}
  $("content").innerHTML='<div class="welcome"><h1>Guardian Delivery Logs</h1><button class="btn secondary small" onclick="renderGuardianDelivery()">Refresh</button></div><div class="panel">Loading...</div>';
@@ -1778,9 +1789,9 @@ async function renderGuardianDelivery(){
  const labels={queued:"অপেক্ষমাণ",processing:"পাঠানো হচ্ছে",sent:"পাঠানো হয়েছে",failed:"ব্যর্থ",blocked:"Provider সেটআপ বাকি",skipped_consent:"সম্মতি নেই",skipped_no_contact:"যোগাযোগ নেই"};
  let html='<div class="welcome"><div><h1>Guardian Delivery Logs</h1><div class="muted">সর্বশেষ ১০০টি SMS ও Email delivery event</div></div><button class="btn secondary small" onclick="renderGuardianDelivery()">Refresh</button></div>';
  html+='<div class="grid">'+statCard("পাঠানো হয়েছে",count("sent"),"সফল delivery","✓")+statCard("ব্যর্থ",count("failed"),"Provider error","!")+statCard("অপেক্ষমাণ",count("queued"),"Queue-তে আছে","◷")+statCard("Provider সেটআপ বাকি",count("blocked"),"Configuration প্রয়োজন","⚙")+'</div>';
- html+='<div class="panel"><div class="table-wrap"><table><thead><tr><th>সময়</th><th>Channel</th><th>প্রাপক</th><th>Status</th><th>Provider / Error</th><th>Attempts</th></tr></thead><tbody>';
- if(!logs.length)html+='<tr><td colspan="6">এখনো কোনো delivery record নেই।</td></tr>';
- logs.forEach(function(x){html+='<tr><td>'+esc(new Date(x.created_at).toLocaleString())+'</td><td>'+(x.channel==="email"?"Email":"SMS")+'</td><td>'+esc(x.recipient_masked||"—")+'</td><td><span class="tag '+(x.status==="sent"?"green":(["failed","blocked"].includes(x.status)?"red":""))+'">'+esc(labels[x.status]||x.status)+'</span></td><td>'+esc(x.provider||"—")+(x.error_message?'<br><small>'+esc(x.error_message)+'</small>':"")+'</td><td>'+esc(x.attempt_count)+'</td></tr>';});
+ html+='<div class="panel"><div class="table-wrap"><table><thead><tr><th>সময়</th><th>Channel</th><th>প্রাপক</th><th>Status</th><th>Provider / Error</th><th>Attempts</th><th>Action</th></tr></thead><tbody>';
+ if(!logs.length)html+='<tr><td colspan="7">এখনো কোনো delivery record নেই।</td></tr>';
+ logs.forEach(function(x){const action=(["failed","blocked"].includes(x.status)&&Number(x.attempt_count)<3)?'<button class="btn secondary small" onclick="retryGuardianDelivery(\''+esc(x.id)+'\')">Retry</button>':"—";html+='<tr><td>'+esc(new Date(x.created_at).toLocaleString())+'</td><td>'+(x.channel==="email"?"Email":"SMS")+'</td><td>'+esc(x.recipient_masked||"—")+'</td><td><span class="tag '+(x.status==="sent"?"green":(["failed","blocked"].includes(x.status)?"red":""))+'">'+esc(labels[x.status]||x.status)+'</span></td><td>'+esc(x.provider||"—")+(x.error_message?'<br><small>'+esc(x.error_message)+'</small>':"")+'</td><td>'+esc(x.attempt_count)+'</td><td>'+action+'</td></tr>';});
  html+='</tbody></table></div></div>';
  $("content").innerHTML=html;
 }
