@@ -2,6 +2,8 @@
 
 The web app is being prepared as an installable Progressive Web App (PWA). The Android Play Store package should use a Trusted Web Activity (TWA) so the Android app displays the same HTTPS CoachingOS application and Supabase-backed account data.
 
+**Proposed Android application ID:** `com.joypaul3164.coachingos`
+
 ## Required before building a signed Play Store AAB
 
 1. Publish the PWA on its final HTTPS production domain.
