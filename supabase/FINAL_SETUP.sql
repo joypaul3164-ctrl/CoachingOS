@@ -7,6 +7,7 @@
 -- CoachingOS Portal identity isolation hardening
 -- Run this migration in Supabase SQL Editor before testing the updated portal UI.
 
+
 create or replace function public.get_coachingos_portal_dashboard()
 returns jsonb
 language sql
@@ -22,9 +23,19 @@ as $$
         'institute_name', i.name,
         'relationship', l.relationship,
         'student_record_id', s.id,
-        'student', s.record_data,
+        'student', jsonb_build_object(
+          'name', s.record_data->>'name',
+          'roll', s.record_data->>'roll',
+          'class_name', s.record_data->>'class_name',
+          'batch', s.record_data->>'batch'
+        ),
         'attendance', coalesce((
-          select jsonb_agg(a.record_data order by a.created_at desc)
+          select jsonb_agg(jsonb_build_object(
+            'date', a.record_data->'date',
+            'batch', a.record_data->'batch',
+            'status', a.record_data->'status',
+            'note', a.record_data->'note'
+          ) order by a.created_at desc)
           from public.coachingos_records a
           where a.institute_id = l.institute_id
             and a.record_type = 'attendance'
@@ -45,7 +56,14 @@ as $$
             )
         ), '[]'::jsonb),
         'exams', coalesce((
-          select jsonb_agg(e.record_data order by e.created_at desc)
+          select jsonb_agg(jsonb_build_object(
+            'exam', e.record_data->'exam',
+            'subject', e.record_data->'subject',
+            'marks', e.record_data->'marks',
+            'total', e.record_data->'total',
+            'grade', e.record_data->'grade',
+            'exam_date', e.record_data->'exam_date'
+          ) order by e.created_at desc)
           from public.coachingos_records e
           where e.institute_id = l.institute_id
             and e.record_type = 'exams'
@@ -66,7 +84,14 @@ as $$
             )
         ), '[]'::jsonb),
         'fees', coalesce((
-          select jsonb_agg(f.record_data order by f.created_at desc)
+          select jsonb_agg(jsonb_build_object(
+            'month', f.record_data->'month',
+            'amount', f.record_data->'amount',
+            'paid', f.record_data->'paid',
+            'due', f.record_data->'due',
+            'date', f.record_data->'date',
+            'receipt', f.record_data->'receipt'
+          ) order by f.created_at desc)
           from public.coachingos_records f
           where f.institute_id = l.institute_id
             and f.record_type = 'fees'
@@ -101,7 +126,7 @@ as $$
   where l.user_id = (select auth.uid());
 $$;
 
-revoke all on function public.get_coachingos_portal_dashboard() from public;
+revoke all on function public.get_coachingos_portal_dashboard() from public, anon;
 grant execute on function public.get_coachingos_portal_dashboard() to authenticated;
 
 
