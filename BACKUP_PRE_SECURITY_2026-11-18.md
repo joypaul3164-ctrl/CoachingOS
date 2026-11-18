@@ -49,3 +49,12 @@ This Git backup preserves the source tree at the recorded commit and the SQL sna
 - Supabase dashboard-level Auth, API, Storage, network, billing, and project settings were not exported.
 - Storage object bytes and any external provider account/configuration are not included.
 - No independent restore test has been performed. This is a source/schema preservation checkpoint, not a verified full disaster-recovery package.
+
+
+## Recovery documentation added on 2026-11-18
+
+- `DEPLOYMENT_RECOVERY.md`: GitHub Pages and Edge Function deployment recovery checklist, verified facts, and deployment gaps.
+- `SUPABASE_RECOVERY_AND_SECRETS.md`: Supabase dashboard configuration checklist and environment variable names/purpose only. No secret values are stored.
+- `RESTORE_REHEARSAL_REPORT.md`: read-only verification results, blockers, and isolated staging restore acceptance criteria.
+- These three documents are recovery instructions/inventory, not proof of a completed end-to-end restore.
+- Full restore test remains pending an isolated staging Supabase project and confirmed GitHub Pages publishing configuration.
