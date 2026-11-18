@@ -45,8 +45,7 @@ jobs:
           supabase init
           mkdir -p supabase/migrations
 
-          # The preserved migration scripts depend on the original CoachingOS
-          # base tables. Restore that base schema first, before feature migrations.
+          # Restore the original base tables before dependent feature migrations.
           cp ../backup-source/supabase/schema.sql supabase/migrations/20261116000000_coachingos_base_schema.sql
 
           declare -A sequence_by_day=()
@@ -61,7 +60,7 @@ jobs:
             sequence=$(( ${sequence_by_day[$day]:-0} + 1 ))
             sequence_by_day[$day]=$sequence
             version="${day}$(printf '%06d' "$sequence")"
-            cp "$source" "supabase/migrations/${version}_${migration_name}"
+            cp "../$source" "supabase/migrations/${version}_${migration_name}"
           done
 
           count=$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l)
