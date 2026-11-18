@@ -57,5 +57,9 @@ jobs:
           assert.match(permissions, /receptionist:\["students","attendance","fees"\]/, "Receptionist role is limited to front-desk modules");
           assert.doesNotMatch(permissions, /admissions|exam_plans/, "Restricted modules are not granted to non-manager staff roles");
 
-          console.log('PASS: admission approval gate, duplicate guard, retry-safe linkage, exam bounds, grade/result calculation, and permission checks are present.');
+          const save = section('async function saveRecord(module,data,id=null){', 'async function enrollAdmission(id){');
+          assert.match(save, /\.select\("id"\)\.maybeSingle\(\)/, "Updates must return the affected record id");
+          assert.match(save, /if\(id&&!r\.data\?\.id\)/, "RLS-filtered zero-row updates must not report success");
+
+          console.log('PASS: admission approval gate, duplicate guard, retry-safe linkage, exam bounds, grade/result calculation, permissions, and update-result verification are present.');
           JS
