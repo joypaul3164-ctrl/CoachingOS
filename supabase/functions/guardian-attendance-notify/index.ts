@@ -11,8 +11,22 @@ const json = (body: unknown, status = 200) =>
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
 
-function maskError(value: string) {
-  return value.replace(/Bearer\s+\S+/gi, "Bearer [redacted]").slice(0, 450);
+function safeError(value: string) {
+  return value
+    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/(api[_-]?key|token|secret|password)\s*[:=]\s*[^\s,"]+/gi, "$1=[redacted]")
+    .slice(0, 350);
+}
+
+function normalizeBangladeshMobile(input: string): string | null {
+  const digits = input.replace(/\D/g, "");
+  let national = digits;
+  if (national.startsWith("00880")) national = national.slice(5);
+  else if (national.startsWith("880")) national = national.slice(3);
+  if (national.length === 11 && /^01[3-9]\d{8}$/.test(national)) {
+    return "+880" + national.slice(1);
+  }
+  return null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -69,91 +83,89 @@ Deno.serve(async (req: Request) => {
     .eq("record_type", "students")
     .maybeSingle();
   if (studentError || !student) return json({ error: "student_not_found" }, 404);
+
   const studentData = student.record_data || {};
   if (String(studentData.guardian_report_consent || "").trim().toLowerCase() !== "yes") {
     return json({ error: "guardian_consent_not_yes" }, 403);
   }
 
-  const email = String(studentData.guardian_email || "").trim();
   const phone = String(studentData.guardian_phone || "").trim();
+  const normalizedPhone = normalizeBangladeshMobile(phone);
   const { data: claimed, error: claimError } = await admin.rpc("claim_coachingos_guardian_deliveries", {
     _institute_id: attendance.institute_id,
     _attendance_record_id: attendanceId,
   });
   if (claimError) return json({ error: "queue_claim_failed" }, 500);
-  if (!claimed?.length) return json({ ok: true, processed: 0, message: "No queued deliveries." });
+  if (!claimed?.length) return json({ ok: true, processed: 0, message: "No queued SMS deliveries." });
 
+  const endpoint = Deno.env.get("SMS_GATEWAY_URL");
+  const apiKey = Deno.env.get("SMS_GATEWAY_API_KEY");
+  const senderId = Deno.env.get("SMS_SENDER_ID");
   const results: Array<{ channel: string; status: string }> = [];
+
   for (const item of claimed) {
+    // Email is intentionally not sent. Keep old queued email rows safely blocked.
+    if (item.channel !== "sms") {
+      await admin.from("guardian_delivery_logs").update({
+        status: "blocked", provider: null, error_message: "email_notifications_disabled",
+        updated_at: new Date().toISOString(),
+      }).eq("id", item.id);
+      results.push({ channel: item.channel, status: "blocked" });
+      continue;
+    }
+
     try {
-      if (item.channel === "email") {
-        const apiKey = Deno.env.get("RESEND_API_KEY");
-        const from = Deno.env.get("EMAIL_FROM");
-        if (!apiKey || !from || !email) {
-          await admin.from("guardian_delivery_logs").update({
-            status: "blocked", provider: "Resend", error_message: "provider_not_configured",
-            updated_at: new Date().toISOString(),
-          }).eq("id", item.id);
-          results.push({ channel: "email", status: "blocked" });
-          continue;
-        }
-        const message = `Attendance update for ${studentData.name || "your student"}: Present on ${attendance.record_data.date || new Date().toISOString().slice(0, 10)}.`;
-        const response = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            from,
-            to: [email],
-            subject: "Attendance update - CoachingOS",
-            text: message,
-          }),
-        });
-        const responseText = await response.text();
-        let responseData: Record<string, unknown> = {};
-        try { responseData = JSON.parse(responseText); } catch { /* provider returned non-JSON */ }
-        if (!response.ok) throw new Error(`Resend ${response.status}: ${maskError(responseText)}`);
+      if (!phone) throw new Error("guardian_phone_missing");
+      if (!normalizedPhone) throw new Error("invalid_bangladesh_mobile_number");
+      if (!endpoint || !apiKey) {
         await admin.from("guardian_delivery_logs").update({
-          status: "sent", provider: "Resend",
-          provider_message_id: String(responseData.id || ""),
-          error_message: null, sent_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          status: "blocked", provider: "SMS gateway",
+          error_message: "sms_provider_not_configured",
+          updated_at: new Date().toISOString(),
         }).eq("id", item.id);
-        results.push({ channel: "email", status: "sent" });
-      } else if (item.channel === "sms") {
-        const endpoint = Deno.env.get("SMS_GATEWAY_URL");
-        const apiKey = Deno.env.get("SMS_GATEWAY_API_KEY");
-        const senderId = Deno.env.get("SMS_SENDER_ID");
-        if (!endpoint || !apiKey || !phone) {
-          await admin.from("guardian_delivery_logs").update({
-            status: "blocked", provider: "SMS gateway",
-            error_message: "provider_not_configured", updated_at: new Date().toISOString(),
-          }).eq("id", item.id);
-          results.push({ channel: "sms", status: "blocked" });
-          continue;
-        }
-        const message = `CoachingOS: ${studentData.name || "Student"} was marked Present on ${attendance.record_data.date || new Date().toISOString().slice(0, 10)}.`;
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ to: phone, message, sender_id: senderId || undefined }),
-        });
-        const responseText = await response.text();
-        let responseData: Record<string, unknown> = {};
-        try { responseData = JSON.parse(responseText); } catch { /* provider returned non-JSON */ }
-        if (!response.ok) throw new Error(`SMS gateway ${response.status}: ${maskError(responseText)}`);
-        await admin.from("guardian_delivery_logs").update({
-          status: "sent", provider: "SMS gateway",
-          provider_message_id: String(responseData.message_id || responseData.id || ""),
-          error_message: null, sent_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-        }).eq("id", item.id);
-        results.push({ channel: "sms", status: "sent" });
+        results.push({ channel: "sms", status: "blocked" });
+        continue;
       }
+
+      const date = String(attendance.record_data.date || new Date().toISOString().slice(0, 10));
+      const studentName = String(studentData.name || "Student").slice(0, 80);
+      const message = `CoachingOS: ${studentName} was marked Present on ${date}.`;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ to: normalizedPhone, message, sender_id: senderId || undefined }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const responseText = await response.text();
+      let responseData: Record<string, unknown> = {};
+      try { responseData = JSON.parse(responseText); } catch { /* provider may return plain text */ }
+      if (!response.ok || responseData.success === false || responseData.status === "error") {
+        throw new Error(`sms_provider_error_${response.status}: ${safeError(responseText)}`);
+      }
+
+      const providerMessageId = String(responseData.message_id || responseData.messageId || responseData.id || "");
+      await admin.from("guardian_delivery_logs").update({
+        status: "sent", provider: "SMS gateway",
+        provider_message_id: providerMessageId || null,
+        error_message: null, sent_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }).eq("id", item.id);
+      results.push({ channel: "sms", status: "provider_accepted" });
     } catch (error) {
-      const message = error instanceof Error ? maskError(error.message) : "delivery_failed";
+      const message = error instanceof Error ? safeError(error.message) : "delivery_failed";
       await admin.from("guardian_delivery_logs").update({
         status: "failed", error_message: message, updated_at: new Date().toISOString(),
       }).eq("id", item.id);
-      results.push({ channel: item.channel, status: "failed" });
+      results.push({ channel: "sms", status: "failed" });
     }
   }
-  return json({ ok: true, processed: results.length, results });
+
+  return json({
+    ok: true,
+    processed: results.length,
+    results,
+    note: "provider_accepted means the SMS provider accepted the request; handset delivery requires provider delivery receipts.",
+  });
 });
