@@ -524,7 +524,7 @@ const TABLE = "coachingos_records";
 
 const $ = id => document.getElementById(id);
 let sb=null,user=null,cloud=false,lang="bn",currentPage="dashboard";
-let activeInstitute="",institutes=[],activeRole="owner",rows={},editingId=null,isPlatformAdmin=false,portalMode=false,portalProfiles=[],portalSelectedIndex=0;
+let activeInstitute="",institutes=[],activeRole="owner",rows={},studentOptions=[],editingId=null,isPlatformAdmin=false,portalMode=false,portalProfiles=[],portalSelectedIndex=0;
 const INSTITUTE_TYPES=[["government","সরকারি প্রতিষ্ঠান"],["private","বেসরকারি প্রতিষ্ঠান"],["school","স্কুল"],["college","কলেজ"],["university","বিশ্ববিদ্যালয়"],["madrasa","মাদ্রাসা"],["coaching","কোচিং সেন্টার"],["training","ট্রেনিং / প্রশিক্ষণ কেন্দ্র"],["ngo","এনজিও / অলাভজনক সংস্থা"],["healthcare","হাসপাতাল / ক্লিনিক"],["business","ব্যবসা প্রতিষ্ঠান"],["other","অন্যান্য"]];
 
 const modules={
@@ -786,6 +786,9 @@ async function loadAll(){
  if(!activeInstitute)return;Object.keys(modules).forEach(k=>rows[k]=[]);
  const r=await sb.from(TABLE).select("*").eq("institute_id",activeInstitute);if(r.error)throw r.error;
  (r.data||[]).forEach(x=>{const k=x.record_type||x.module,d=x.record_data||x.data||{};if(rows[k])rows[k].push({...d,id:x.id,_created_at:x.created_at});});
+ const options=await sb.rpc("get_coachingos_student_options",{_institute_id:activeInstitute});
+ if(options.error)throw options.error;
+ studentOptions=Array.isArray(options.data)?options.data:[];
 }
 async function afterAuth(){
  if(!user)return;
@@ -883,7 +886,7 @@ async function submitInstitute(event){
  }catch(e){toast("Institute error: "+(e.message||e));}
 }
 
-async function signOut(){if(sb)await sb.auth.signOut();user=null;activeInstitute="";institutes=[];rows={};portalMode=false;portalProfiles=[];portalSelectedIndex=0;isPlatformAdmin=false;$("appView").classList.add("hidden");$("loginView").classList.remove("hidden");}
+async function signOut(){if(sb)await sb.auth.signOut();user=null;activeInstitute="";institutes=[];rows={};portalMode=false;portalProfiles=[];portalSelectedIndex=0;studentOptions=[];isPlatformAdmin=false;$("appView").classList.add("hidden");$("loginView").classList.remove("hidden");}
 
 async function saveRecord(module,data,id=null){
  try{
@@ -1535,8 +1538,9 @@ function openForm(module,id=null){
   let control="";
 
   if(key==="student"&&["attendance","exams","fees"].includes(module)){
-   const students=rows.students||[];
-   const selected=record?.student_record_id||students.find(s=>String(s.name||"")===String(value))?.id||"";
+   const students=studentOptions.length?studentOptions:(rows.students||[]);
+   const nameMatches=students.filter(s=>String(s.name||"")===String(value));
+   const selected=record?.student_record_id||(nameMatches.length===1?nameMatches[0].id:"");
    control=`<select id="f_student" required><option value="">শিক্ষার্থী নির্বাচন করুন</option>${students.map(s=>`<option value="${esc(s.id)}" ${String(selected)===String(s.id)?"selected":""}>${esc(s.name||"নাম নেই")}${s.roll?" — "+esc(s.roll):""}</option>`).join("")}</select>`;
   }else if(type==="select"){
    control=`<select id="f_${key}">
@@ -1593,7 +1597,7 @@ async function submitForm(event,module){
  }
  if(["attendance","exams","fees"].includes(module)){
   const studentId=$("f_student")?.value;
-  const student=(rows.students||[]).find(s=>String(s.id)===String(studentId));
+  const student=(studentOptions||[]).find(s=>String(s.id)===String(studentId))||(rows.students||[]).find(s=>String(s.id)===String(studentId));
   if(!student)return toast("শিক্ষার্থী নির্বাচন করুন");
   data.student_record_id=student.id;
   data.student=student.name||"";
