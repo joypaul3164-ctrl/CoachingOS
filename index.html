@@ -601,7 +601,7 @@ tbody tr:hover{background:#f4fbf8}
   <div class="muted" id="loginSub">আপনার প্রতিষ্ঠানের ব্যবস্থাপনা শুরু করতে লগইন করুন।</div>
   <div class="field"><label>Email address</label><input id="email" type="email" autocomplete="username" placeholder="admin@example.com"></div>
   <div class="field"><label>Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Password"></div>
-  <button class="btn fullbtn" onclick="signIn()" id="loginBtn">Sign In / লগইন</button>
+  <button class="btn fullbtn" type="button" id="loginBtn">Sign In / লগইন</button>
   <button class="btn secondary fullbtn" onclick="signUp()" id="signupBtn">Create Admin / Sign Up</button>
   <button class="btn ghost fullbtn" onclick="resetPassword()">Forgot Password?</button>
   <div id="loginStatus" class="login-status" role="status" aria-live="polite"></div>
@@ -2196,6 +2196,19 @@ async function boot(){
  }
 }
 
+// Bind login with a native event listener so it works even if inline handlers are restricted.
+window.signIn = signIn;
+const loginButton = $("loginBtn");
+if (loginButton) {
+ loginButton.type = "button";
+ loginButton.addEventListener("click", function(event) {
+  event.preventDefault();
+  loginFeedback("লগইন বাটন কাজ করছে। যাচাই শুরু হচ্ছে…", "info");
+  signIn();
+ });
+} else {
+ console.error("CoachingOS: login button element was not found.");
+}
 boot();
 </script>
 </body>
