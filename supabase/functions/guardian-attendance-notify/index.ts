@@ -120,6 +120,7 @@ Deno.serve(async (req: Request) => {
       if (!endpoint || !apiKey) {
         await admin.from("guardian_delivery_logs").update({
           status: "blocked", provider: "SMS gateway",
+          processing_started_at: null,
           error_message: "sms_provider_not_configured",
           updated_at: new Date().toISOString(),
         }).eq("id", item.id);
@@ -150,13 +151,22 @@ Deno.serve(async (req: Request) => {
       await admin.from("guardian_delivery_logs").update({
         status: "sent", provider: "SMS gateway",
         provider_message_id: providerMessageId || null,
+        provider_delivery_status: "accepted",
+        processing_started_at: null,
+        next_attempt_at: null,
         error_message: null, sent_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       }).eq("id", item.id);
       results.push({ channel: "sms", status: "provider_accepted" });
     } catch (error) {
       const message = error instanceof Error ? safeError(error.message) : "delivery_failed";
       await admin.from("guardian_delivery_logs").update({
-        status: "failed", error_message: message, updated_at: new Date().toISOString(),
+        status: Number(item.attempt_count) < 3 ? "queued" : "failed",
+        next_attempt_at: Number(item.attempt_count) < 3
+          ? new Date(Date.now() + (Number(item.attempt_count) === 1 ? 60_000 : 5 * 60_000)).toISOString()
+          : null,
+        processing_started_at: null,
+        error_message: message,
+        updated_at: new Date().toISOString(),
       }).eq("id", item.id);
       results.push({ channel: "sms", status: "failed" });
     }
