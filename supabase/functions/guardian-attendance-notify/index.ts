@@ -91,16 +91,26 @@ Deno.serve(async (req: Request) => {
 
   const phone = String(studentData.guardian_phone || "").trim();
   const normalizedPhone = normalizeBangladeshMobile(phone);
+  const endpoint = Deno.env.get("SMS_GATEWAY_URL");
+  const apiKey = Deno.env.get("SMS_GATEWAY_API_KEY");
+  const senderId = Deno.env.get("SMS_SENDER_ID");
+
+  // Keep deliveries queued until a provider is configured; never consume attempts while offline.
+  if (!endpoint || !apiKey) {
+    return json({
+      ok: true,
+      processed: 0,
+      queued: true,
+      message: "SMS provider is not configured; delivery remains queued.",
+    });
+  }
+
   const { data: claimed, error: claimError } = await admin.rpc("claim_coachingos_guardian_deliveries", {
     _institute_id: attendance.institute_id,
     _attendance_record_id: attendanceId,
   });
   if (claimError) return json({ error: "queue_claim_failed" }, 500);
   if (!claimed?.length) return json({ ok: true, processed: 0, message: "No queued SMS deliveries." });
-
-  const endpoint = Deno.env.get("SMS_GATEWAY_URL");
-  const apiKey = Deno.env.get("SMS_GATEWAY_API_KEY");
-  const senderId = Deno.env.get("SMS_SENDER_ID");
   const results: Array<{ channel: string; status: string }> = [];
 
   for (const item of claimed) {
