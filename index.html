@@ -1036,7 +1036,7 @@ async function updateRecoveredPassword(){
 }
 function canWrite(module=null){
  if(["owner","admin","manager"].includes(activeRole))return true;
- const permissions={teacher:["batches","routine","attendance","exams","exam_plans"],accountant:["fees","expenses","payroll"],receptionist:["students","attendance","fees","admissions"],staff:[]};
+ const permissions={teacher:["batches","routine","attendance","exams"],accountant:["fees","expenses","payroll"],receptionist:["students","attendance","fees"],staff:[]};
  return module?((permissions[activeRole]||[]).includes(module)):false;
 }
 function canManageStaff(){return activeRole==="owner"||activeRole==="admin";}
