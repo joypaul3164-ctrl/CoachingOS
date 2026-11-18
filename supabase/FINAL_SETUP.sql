@@ -514,3 +514,167 @@ $$;
 
 revoke all on function public.get_coachingos_student_options(uuid) from public, anon;
 grant execute on function public.get_coachingos_student_options(uuid) to authenticated;
+
+
+
+-- Guardian attendance delivery automation: secure outbox and delivery audit
+create table if not exists public.guardian_delivery_logs (
+  id uuid primary key default gen_random_uuid(),
+  institute_id uuid not null references public.institutes(id) on delete cascade,
+  attendance_record_id uuid not null,
+  student_record_id uuid,
+  event_key text not null,
+  channel text not null check (channel in ('email','sms')),
+  recipient_masked text,
+  status text not null check (status in ('queued','processing','sent','failed','blocked','skipped_consent','skipped_no_contact')),
+  provider text,
+  provider_message_id text,
+  error_message text,
+  attempt_count integer not null default 0 check (attempt_count >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  sent_at timestamptz,
+  unique (event_key, channel)
+);
+
+create index if not exists guardian_delivery_logs_institute_created_idx
+  on public.guardian_delivery_logs (institute_id, created_at desc);
+create index if not exists guardian_delivery_logs_attendance_idx
+  on public.guardian_delivery_logs (attendance_record_id);
+
+alter table public.guardian_delivery_logs enable row level security;
+revoke all on public.guardian_delivery_logs from anon, public;
+grant select on public.guardian_delivery_logs to authenticated;
+grant all on public.guardian_delivery_logs to service_role;
+
+drop policy if exists guardian_delivery_logs_read_admin on public.guardian_delivery_logs;
+create policy guardian_delivery_logs_read_admin
+on public.guardian_delivery_logs
+for select to authenticated
+using (
+  exists (
+    select 1 from public.institute_members m
+    where m.institute_id = guardian_delivery_logs.institute_id
+      and m.user_id = (select auth.uid())
+      and m.role in ('owner','admin','manager','receptionist')
+  )
+);
+
+create or replace function public.enqueue_guardian_attendance_delivery()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  student_id uuid;
+  student_data jsonb;
+  guardian_email text;
+  guardian_phone text;
+  consent text;
+  event_token text;
+  email_status text;
+  sms_status text;
+begin
+  if new.record_type <> 'attendance'
+     or coalesce(new.record_data->>'status','') <> 'Present' then
+    return new;
+  end if;
+  if tg_op = 'UPDATE'
+     and old.record_type = 'attendance'
+     and coalesce(old.record_data->>'status','') = 'Present' then
+    return new;
+  end if;
+
+  student_id := nullif(new.record_data->>'student_record_id','')::uuid;
+  event_token := new.id::text || ':' || coalesce(new.updated_at, new.created_at, pg_catalog.now())::text;
+
+  if student_id is not null then
+    select s.record_data into student_data
+    from public.coachingos_records s
+    where s.id = student_id and s.institute_id = new.institute_id
+      and s.record_type = 'students' limit 1;
+  end if;
+
+  guardian_email := nullif(pg_catalog.btrim(coalesce(student_data->>'guardian_email','')), '');
+  guardian_phone := nullif(pg_catalog.btrim(coalesce(student_data->>'guardian_phone','')), '');
+  consent := lower(pg_catalog.btrim(coalesce(student_data->>'guardian_report_consent','')));
+
+  email_status := case when student_data is null then 'blocked'
+    when consent <> 'yes' then 'skipped_consent'
+    when guardian_email is null then 'skipped_no_contact' else 'queued' end;
+  sms_status := case when student_data is null then 'blocked'
+    when consent <> 'yes' then 'skipped_consent'
+    when guardian_phone is null then 'skipped_no_contact' else 'queued' end;
+
+  insert into public.guardian_delivery_logs(
+    institute_id, attendance_record_id, student_record_id, event_key,
+    channel, recipient_masked, status, error_message
+  ) values
+  (new.institute_id,new.id,student_id,event_token,'email',
+   case when guardian_email is null then null else pg_catalog.left(guardian_email,1)||'***@'||coalesce(pg_catalog.split_part(guardian_email,'@',2),'***') end,
+   email_status,
+   case when student_data is null then 'student_record_not_found' when consent <> 'yes' then 'guardian_consent_not_yes' when guardian_email is null then 'guardian_email_missing' end),
+  (new.institute_id,new.id,student_id,event_token,'sms',
+   case when guardian_phone is null then null else '***'||pg_catalog.right(regexp_replace(guardian_phone,'[^0-9]','','g'),4) end,
+   sms_status,
+   case when student_data is null then 'student_record_not_found' when consent <> 'yes' then 'guardian_consent_not_yes' when guardian_phone is null then 'guardian_phone_missing' end)
+  on conflict (event_key,channel) do nothing;
+
+  return new;
+end;
+$$;
+revoke all on function public.enqueue_guardian_attendance_delivery() from public, anon, authenticated;
+drop trigger if exists coachingos_guardian_attendance_delivery on public.coachingos_records;
+create trigger coachingos_guardian_attendance_delivery
+after insert or update of record_data on public.coachingos_records
+for each row execute function public.enqueue_guardian_attendance_delivery();
+
+create or replace function public.retry_coachingos_guardian_delivery(_log_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  target_institute uuid;
+  target_attendance uuid;
+  caller_role text;
+begin
+  select l.institute_id into target_institute from public.guardian_delivery_logs l where l.id = _log_id;
+  if target_institute is null then raise exception 'Delivery log not found'; end if;
+  select m.role into caller_role from public.institute_members m
+   where m.institute_id = target_institute and m.user_id = (select auth.uid()) limit 1;
+  if coalesce(caller_role,'') not in ('owner','admin','manager','receptionist') then
+    raise exception 'Not authorized to retry guardian delivery' using errcode = '42501';
+  end if;
+  update public.guardian_delivery_logs l
+   set status='queued', error_message=null, updated_at=pg_catalog.now()
+   where l.id=_log_id and l.status in ('failed','blocked') and l.attempt_count < 3
+   returning l.attendance_record_id into target_attendance;
+  if target_attendance is null then raise exception 'Delivery is not retryable or retry limit reached'; end if;
+  return target_attendance;
+end;
+$$;
+revoke all on function public.retry_coachingos_guardian_delivery(uuid) from public, anon;
+grant execute on function public.retry_coachingos_guardian_delivery(uuid) to authenticated;
+
+create or replace function public.claim_coachingos_guardian_deliveries(
+  _institute_id uuid, _attendance_record_id uuid
+)
+returns setof public.guardian_delivery_logs
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  return query
+  update public.guardian_delivery_logs l
+  set status='processing', attempt_count=l.attempt_count+1, updated_at=pg_catalog.now()
+  where l.institute_id=_institute_id and l.attendance_record_id=_attendance_record_id
+    and l.status='queued' and l.attempt_count<3
+  returning l.*;
+end;
+$$;
+revoke all on function public.claim_coachingos_guardian_deliveries(uuid,uuid) from public, anon, authenticated;
+grant execute on function public.claim_coachingos_guardian_deliveries(uuid,uuid) to service_role;
