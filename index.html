@@ -916,7 +916,6 @@ async function saveRecord(module,data,id=null){
     const delivery=await sb.functions.invoke("guardian-attendance-notify",{body:{attendance_id:savedRecordId}});
     if(delivery.error)console.warn("Guardian delivery processing:",delivery.error.message);
    }
-   await loadAll();
   }else{
    if(id){
     rows[module]=rows[module].map(x=>x.id===id?{...data,id}:x);
