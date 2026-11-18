@@ -1872,6 +1872,65 @@ function printFeeReceipt(feeId,paymentIndex){
 .visual-empty{display:grid;justify-items:center;gap:8px;padding:22px 12px;text-align:center;color:var(--muted)}
 .visual-empty svg{width:116px;height:86px}
 @media(max-width:720px){.visual-hero{padding:18px}.visual-hero-art{width:112px;height:100px}.visual-mini-grid{grid-template-columns:1fr}.visual-mini{padding:10px}}
+
+/* ===== CoachingOS Signature Identity: Orbit Grid ===== */
+:root{
+ --navy:#071b2b;--navy2:#10364a;--blue:#087f8c;--cyan:#32d6c2;
+ --bg:#f1f8f8;--card:#ffffff;--ink:#102b3b;--muted:#647d89;
+ --line:#dcebed;--green:#0e9b79;--shadow:0 16px 42px rgba(8,54,70,.075);
+}
+body{background:radial-gradient(ellipse at 88% 0%,#d8f5ef 0,transparent 30%),#f1f8f8;color:#102b3b}
+.login{
+ background:radial-gradient(circle at 14% 16%,#b8f0e8 0,transparent 26%),
+ radial-gradient(circle at 88% 82%,#c7e8f2 0,transparent 28%),
+ linear-gradient(135deg,#061b2b,#0d3b4b 58%,#087e83);
+ position:relative;isolation:isolate;overflow:hidden
+}
+.login:before,.login:after{content:"";position:absolute;z-index:-1;border:1px solid #b8fff32c;border-radius:50%;width:420px;height:420px;left:-170px;top:-190px;box-shadow:0 0 0 34px #b8fff310,0 0 0 70px #b8fff308}
+.login:after{width:520px;height:520px;left:auto;top:auto;right:-250px;bottom:-300px}
+.login-card{border:1px solid #ffffffa8;border-radius:28px;padding:34px;background:rgba(255,255,255,.94);backdrop-filter:blur(18px);box-shadow:0 32px 90px #00131f66;position:relative}
+.login-card:before{content:"";position:absolute;left:34px;right:34px;top:0;height:4px;border-radius:0 0 8px 8px;background:linear-gradient(90deg,#087f8c,#35d8c2,#8ce8d5)}
+.brand{gap:13px}
+.logo{width:48px;height:48px;border-radius:16px;background:linear-gradient(145deg,#062b40,#087f8c 58%,#38d7bd);box-shadow:0 8px 20px #087f8c40;position:relative;isolation:isolate;overflow:hidden;font-size:0}
+.logo:before{content:"";position:absolute;width:24px;height:24px;border:3px solid #d9fff7;border-radius:8px 8px 8px 2px;transform:rotate(-12deg);left:11px;top:10px}
+.logo:after{content:"";position:absolute;width:8px;height:8px;border-radius:50%;background:#a6fff0;right:8px;top:8px;box-shadow:-19px 21px 0 -2px #a6fff0}
+.brand b{letter-spacing:-.5px;font-weight:950}
+.brand small{letter-spacing:.35px}
+.sidebar{background:linear-gradient(165deg,#061b2b 0%,#0a2b3e 54%,#07505a 100%);border-right:1px solid #ffffff12;box-shadow:12px 0 36px #06263712}
+.sidebar:after{content:"";position:fixed;left:0;bottom:0;width:255px;height:190px;pointer-events:none;background:radial-gradient(ellipse at 20% 100%,#22c7b322,transparent 70%)}
+.sidebar .logo{border:1px solid #a6fff044}
+.nav button{border:1px solid transparent;border-radius:12px;padding:11px 12px;transition:background .2s,border-color .2s,transform .2s}
+.nav button:hover{background:#ffffff12;border-color:#ffffff18;transform:translateX(2px)}
+.nav button.active{background:linear-gradient(100deg,#0b8e91,#08717c);box-shadow:0 7px 18px #001d2b45;color:#fff}
+.nav-label{color:#78c9c5;letter-spacing:1.7px}
+.topbar{background:#ffffffdf;backdrop-filter:blur(16px);border-bottom:1px solid #dcebed}
+.crumb{letter-spacing:-.4px}
+.content{padding-top:28px}
+.visual-hero{background:linear-gradient(112deg,#062437 0%,#07576a 56%,#10a99d 100%);border:1px solid #ffffff40;border-radius:24px;box-shadow:0 18px 42px #07576a24;padding:25px 28px}
+.visual-hero:before{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 35%,#ffffff0b 35.2%,transparent 35.8%),radial-gradient(circle at 80% 20%,#b7fff21e,transparent 26%);pointer-events:none}
+.visual-hero .eyebrow{letter-spacing:2.2px}
+.stat,.panel,.form-card{border-radius:19px;border-color:#dcebed;box-shadow:0 10px 30px rgba(8,54,70,.055);transition:transform .2s,box-shadow .2s,border-color .2s}
+.stat:hover,.visual-mini:hover{transform:translateY(-3px);box-shadow:0 16px 34px rgba(8,90,98,.11);border-color:#b5e5df}
+.stat .num{letter-spacing:-1.1px}
+.bubble{border-radius:13px;background:linear-gradient(145deg,#d8f8f1,#e6f3fb);color:#087f8c}
+.btn{background:linear-gradient(110deg,#087f8c,#0aa99d);box-shadow:0 5px 13px #087f8c22;border-radius:11px;transition:transform .18s,filter .18s,box-shadow .18s}
+.btn:hover{filter:brightness(1.04);transform:translateY(-1px);box-shadow:0 8px 18px #087f8c30}
+.btn.secondary{background:#e0f6f2;color:#087a7d;box-shadow:none}
+.btn.ghost{background:#edf4f5;color:#385965;box-shadow:none}
+.field input,.field select,.field textarea,.toolbar input,.toolbar select{border-radius:12px;border-color:#d6e7e9}
+.field input:focus,.field select:focus,.field textarea:focus,.toolbar input:focus{border-color:#27aaa3;box-shadow:0 0 0 3px #d9f5f0}
+th{background:#eff8f7;color:#52717c}
+.tag{background:#e0f6f2;color:#087b7d}
+.visual-mini{border-radius:17px;transition:transform .2s,box-shadow .2s}
+.visual-mini-icon{background:linear-gradient(145deg,#d9f8f0,#e4f2fa);color:#087f8c;border-radius:14px}
+@media(max-width:720px){
+ .login-card{padding:26px 22px;border-radius:23px}
+ .visual-hero{border-radius:19px}
+ .content{padding:17px 14px}
+ .topbar{padding:0 15px}
+}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
 </style><div class="receipt"><div class="head"><h2>'+safe(institute)+'</h2><h3>পেমেন্ট রসিদ</h3></div><div class="row"><span>শিক্ষার্থী</span><b>'+safe(fee.student)+'</b></div><div class="row"><span>ফি মাস</span><b>'+safe(fee.month)+'</b></div><div class="row"><span>তারিখ</span><b>'+safe(p.date)+'</b></div><div class="row"><span>রসিদ নম্বর</span><b>'+safe(p.receipt||"—")+'</b></div><div class="row"><span>পেমেন্ট মাধ্যম</span><b>'+safe(p.method)+'</b></div><div class="row total"><span>এই পেমেন্ট</span><b>৳'+money(p.amount)+'</b></div><div class="row"><span>এ পর্যন্ত মোট জমা</span><b>৳'+money(paidBefore)+'</b></div><div class="row"><span>বর্তমান বকেয়া</span><b>৳'+money(Math.max(0,Number(fee.amount||0)-paidBefore))+'</b></div><div class="foot">ধন্যবাদ। রসিদটি সংরক্ষণ করুন।<br><button onclick="window.print()">Print</button></div></div></html>');
  w.document.close();
 }
