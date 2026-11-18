@@ -1538,7 +1538,7 @@ function openForm(module,id=null){
   let control="";
 
   if(key==="student"&&["attendance","exams","fees"].includes(module)){
-   const students=studentOptions.length?studentOptions:(rows.students||[]);
+   const students=cloud?studentOptions:(rows.students||[]);
    const nameMatches=students.filter(s=>String(s.name||"")===String(value));
    const selected=record?.student_record_id||(nameMatches.length===1?nameMatches[0].id:"");
    control=`<select id="f_student" required><option value="">শিক্ষার্থী নির্বাচন করুন</option>${students.map(s=>`<option value="${esc(s.id)}" ${String(selected)===String(s.id)?"selected":""}>${esc(s.name||"নাম নেই")}${s.roll?" — "+esc(s.roll):""}</option>`).join("")}</select>`;
@@ -1597,7 +1597,7 @@ async function submitForm(event,module){
  }
  if(["attendance","exams","fees"].includes(module)){
   const studentId=$("f_student")?.value;
-  const student=(studentOptions||[]).find(s=>String(s.id)===String(studentId))||(rows.students||[]).find(s=>String(s.id)===String(studentId));
+  const student=(cloud?studentOptions:(rows.students||[])).find(s=>String(s.id)===String(studentId));
   if(!student)return toast("শিক্ষার্থী নির্বাচন করুন");
   data.student_record_id=student.id;
   data.student=student.name||"";
