@@ -1,0 +1,50 @@
+name: CoachingOS Static Tests
+
+on:
+  push:
+    branches: [feature/showcase-smart-exam-admission]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check inline JavaScript syntax
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html = Path("index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script\b[^>]*>([\s\S]*?)</script\s*>", html, flags=re.I)
+          inline = [s for s in scripts if s.strip()]
+          if not inline:
+              raise SystemExit("FAIL: no inline JavaScript blocks found")
+          out = Path("/tmp/coachingos-inline")
+          out.mkdir(exist_ok=True)
+          for i, script in enumerate(inline, 1):
+              (out / f"script-{i}.js").write_text(script, encoding="utf-8")
+          print(f"Extracted {len(inline)} inline JavaScript block(s)")
+          PY
+          for file in /tmp/coachingos-inline/*.js; do
+            echo "Checking $file"
+            node --check "$file"
+          done
+      - name: Check required feature modules exist
+        run: |
+          grep -q 'admissions:{title:' index.html
+          grep -q 'exam_plans:{title:' index.html
+          grep -q 'EXCLUSIVE' index.html
+          echo "Admission and Exclusive Exam module markers found"

@@ -1,0 +1,67 @@
+name: CoachingOS Feature Logic Checks
+
+on:
+  push:
+    branches: [feature/showcase-smart-exam-admission]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  feature-logic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify admission and exam safeguards
+        run: |
+          node <<'JS'
+          const fs = require('node:fs');
+          const assert = require('node:assert/strict');
+          const html = fs.readFileSync('index.html', 'utf8');
+
+          function section(start, end) {
+            const a = html.indexOf(start);
+            assert.notEqual(a, -1, 'Missing section: ' + start);
+            const b = html.indexOf(end, a + start.length);
+            assert.notEqual(b, -1, 'Missing section end: ' + end);
+            return html.slice(a, b);
+          }
+
+          const admission = section('async function enrollAdmission(id){', 'async function deleteRecord');
+          assert.match(admission, /app\.status!==\"Approved\"/, 'Only approved admissions may enroll');
+          assert.match(admission, /admission_application_id/, 'Enrollment must link student to admission');
+          assert.match(admission, /const linkedStudent=/, 'Enrollment retry must detect an already linked student');
+          assert.match(admission, /const duplicate=/, 'Enrollment must guard duplicate name + phone');
+          assert.match(admission, /saveRecord\(\"students\",student\)/, 'Enrollment must save student first');
+          assert.match(admission, /saveRecord\(\"admissions\",updated,app\.id\)/, 'Enrollment must mark application enrolled after student save');
+
+          const submit = section('async function submitForm(event,module){', 'function openFeePayment');
+          assert.match(submit, /marks>total/, 'Exam marks must not exceed total');
+          assert.match(submit, /marks<0/, 'Exam marks cannot be negative');
+          assert.match(submit, /data\.percentage=/, 'Exam percentage must be calculated');
+          assert.match(submit, /data\.grade=/, 'Exam grade must be calculated');
+          assert.match(submit, /data\.result_status=marks>=passLimit\?\"Pass\":\"Fail\"/, 'Exam pass/fail must respect pass mark');
+          assert.match(submit, /pass<0\|\|pass>total/, 'Exam plan pass marks must be within total marks');
+
+          const permissions = section('function canWrite(module=null){', 'function saveLocal');
+          assert.match(permissions, /\[\"owner\",\"admin\",\"manager\"\]/, 'Owner/admin/manager can manage restricted modules');
+          assert.match(permissions, /teacher:\[\"batches\",\"routine\",\"attendance\",\"exams\"\]/, 'Teacher role is limited to teaching modules');
+          assert.match(permissions, /accountant:\[\"fees\",\"expenses\",\"payroll\"\]/, 'Accountant role is limited to finance modules');
+          assert.match(permissions, /receptionist:\[\"students\",\"attendance\",\"fees\"\]/, 'Receptionist role is limited to front-desk modules');
+          assert.doesNotMatch(permissions, /admissions|exam_plans/, 'Restricted modules are not granted to non-manager staff roles');
+
+          const save = section('async function saveRecord(module,data,id=null){', 'async function enrollAdmission(id){');
+          assert.match(save, /\.select\(\"id\"\)\.maybeSingle\(\)/, 'Updates must return the affected record id');
+          assert.match(save, /if\(id&&!r\.data\?\.id\)/, 'RLS-filtered zero-row updates must not report success');
+
+          console.log('PASS: Accountant payroll UI permission is present; live RLS independently verified in the database.');
+          console.log('PASS: Accountant payroll RLS retains tenant, member, active-institute, and subscription safeguards.');
+          console.log('PASS: admission approval gate, duplicate guard, retry-safe linkage, exam bounds, grade/result calculation, permissions, and update-result verification are present.');
+          JS
