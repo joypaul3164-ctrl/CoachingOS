@@ -1,0 +1,28 @@
+{
+  "id": "./",
+  "name": "CoachingOS — Institute Management",
+  "short_name": "CoachingOS",
+  "description": "Manage students, teachers, attendance, fees, exams and branches.",
+  "lang": "bn",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f7fb",
+  "theme_color": "#101b35",
+  "categories": ["education", "business", "productivity"],
+  "icons": [
+    {
+      "src": "./assets/coachingos-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/coachingos-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
