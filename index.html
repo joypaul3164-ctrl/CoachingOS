@@ -1295,12 +1295,34 @@ function renderDashboard(){
  const recent=[...students].slice(0,5);
 
  $("content").innerHTML=`
- <div class="welcome">
-  <div>
-   <h1>${t("স্বাগতম, CoachingOS-এ","Welcome to CoachingOS")}</h1>
-   <div class="muted">${t("আপনার প্রতিষ্ঠানের সার্বিক চিত্র","Your institute overview")}</div>
+ <section class="visual-hero">
+  <div class="visual-hero-copy">
+   <div class="eyebrow">COACHINGOS • SMART INSTITUTE MANAGEMENT</div>
+   <h2>${t("আপনার কোচিং পরিচালনা হোক আরও সহজ","Make institute management simpler")}</h2>
+   <p>${t("শিক্ষার্থী, শিক্ষক, উপস্থিতি ও হিসাব—সব এক জায়গায়।","Students, teachers, attendance and finance in one place.")}</p>
+   <div style="margin-top:13px"><span class="tag">${cloud?"☁ CLOUD CONNECTED":"LOCAL MODE"}</span></div>
   </div>
-  <span class="tag green">${cloud?"CLOUD CONNECTED":"LOCAL MODE"}</span>
+  <div class="visual-hero-art" aria-hidden="true">
+   <svg viewBox="0 0 190 135" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M18 111h154" stroke="#B8FFF3" stroke-width="3" stroke-linecap="round" opacity=".65"/>
+    <rect x="31" y="37" width="91" height="70" rx="9" fill="#E9FFFB"/>
+    <path d="M45 53h62M45 65h42M45 78h54" stroke="#43AFA6" stroke-width="5" stroke-linecap="round"/>
+    <rect x="89" y="16" width="70" height="88" rx="10" fill="#D0F8F0" stroke="#fff" stroke-width="2"/>
+    <rect x="100" y="29" width="48" height="32" rx="5" fill="#70D7C8"/>
+    <path d="M108 52l10-11 8 7 12-13" stroke="#087B83" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="124" cy="77" r="9" fill="#20A99D"/><path d="M108 98c2-11 10-16 16-16s14 5 16 16" fill="#20A99D"/>
+    <path d="M19 27l5 5 10-12" stroke="#C9FFF5" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="166" cy="23" r="8" fill="#B8FFF3"/><path d="M166 18v10M161 23h10" stroke="#087B83" stroke-width="2"/>
+   </svg>
+  </div>
+ </section>
+ <div class="visual-mini-grid">
+  <div class="visual-mini"><span class="visual-mini-icon">🎓</span><div><b>${t("শিক্ষার্থী ব্যবস্থাপনা","Student Management")}</b><small>${t("প্রোফাইল ও একাডেমিক তথ্য","Profiles and academic records")}</small></div></div>
+  <div class="visual-mini"><span class="visual-mini-icon" style="background:#e6edff;color:#5266d9">📅</span><div><b>${t("উপস্থিতি ও রুটিন","Attendance & Routine")}</b><small>${t("দৈনিক ক্লাস পরিচালনা","Daily class operations")}</small></div></div>
+  <div class="visual-mini"><span class="visual-mini-icon" style="background:#fff0db;color:#bd7b25">💳</span><div><b>${t("ফি ও হিসাব","Fees & Finance")}</b><small>${t("আদায় ও বকেয়ার সারাংশ","Collections and dues")}</small></div></div>
+ </div>
+ <div class="welcome">
+  <div><h1>${t("ড্যাশবোর্ডের সারাংশ","Dashboard Overview")}</h1><div class="muted">${t("আপনার প্রতিষ্ঠানের সার্বিক চিত্র","Your institute overview")}</div></div>
  </div>
 
  <div class="grid">
@@ -1327,7 +1349,18 @@ function renderDashboard(){
        <td><span class="tag green">${esc(x.status||"Active")}</span></td>
       </tr>`).join("")}
      </tbody>
-    </table></div>`:`<div class="empty">${t("এখনো কোনো শিক্ষার্থী যোগ করা হয়নি","No students added yet")}</div>`}
+    </table></div>`:`<div class="visual-empty">
+ <svg viewBox="0 0 140 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <rect x="28" y="14" width="84" height="72" rx="10" fill="#DDF7F1"/>
+  <rect x="39" y="25" width="62" height="50" rx="6" fill="#fff"/>
+  <circle cx="70" cy="42" r="10" fill="#78CFC2"/>
+  <path d="M51 67c2-10 9-15 19-15s17 5 19 15" fill="#78CFC2"/>
+  <path d="M18 30l7 7 13-15M112 25l6-6 6 6M117 75l5 5 9-11" stroke="#22A99A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+ </svg>
+ <b>${t("এখনো কোনো শিক্ষার্থী যোগ করা হয়নি","No students added yet")}</b>
+ <span>${t("শিক্ষার্থী যোগ করলে তাদের তথ্য এখানে দেখা যাবে।","Add a student to see their information here.")}</span>
+ <button class="btn secondary small" onclick="openForm('students')">＋ ${t("শিক্ষার্থী যোগ করুন","Add Student")}</button>
+</div>`}
   </div>
 
   <div class="panel">
@@ -1821,7 +1854,25 @@ function printFeeReceipt(feeId,paymentIndex){
  const w=window.open("","_blank","width=760,height=700");
  if(!w)return toast("প্রিন্ট উইন্ডো খুলতে Browser popup অনুমতি দিন");
  const safe=v=>String(v??"—").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
- w.document.write('<!doctype html><html lang="bn"><meta charset="utf-8"><title>Fee Receipt</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#172033}.receipt{max-width:650px;margin:auto;border:1px solid #dbe2ea;border-radius:12px;padding:28px}.head{text-align:center;border-bottom:1px solid #ddd;padding-bottom:16px}.row{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid #eee}.total{font-size:20px;font-weight:bold}.foot{margin-top:30px;color:#667085;font-size:12px;text-align:center}@media print{button{display:none}}</style><div class="receipt"><div class="head"><h2>'+safe(institute)+'</h2><h3>পেমেন্ট রসিদ</h3></div><div class="row"><span>শিক্ষার্থী</span><b>'+safe(fee.student)+'</b></div><div class="row"><span>ফি মাস</span><b>'+safe(fee.month)+'</b></div><div class="row"><span>তারিখ</span><b>'+safe(p.date)+'</b></div><div class="row"><span>রসিদ নম্বর</span><b>'+safe(p.receipt||"—")+'</b></div><div class="row"><span>পেমেন্ট মাধ্যম</span><b>'+safe(p.method)+'</b></div><div class="row total"><span>এই পেমেন্ট</span><b>৳'+money(p.amount)+'</b></div><div class="row"><span>এ পর্যন্ত মোট জমা</span><b>৳'+money(paidBefore)+'</b></div><div class="row"><span>বর্তমান বকেয়া</span><b>৳'+money(Math.max(0,Number(fee.amount||0)-paidBefore))+'</b></div><div class="foot">ধন্যবাদ। রসিদটি সংরক্ষণ করুন।<br><button onclick="window.print()">Print</button></div></div></html>');
+ w.document.write('<!doctype html><html lang="bn"><meta charset="utf-8"><title>Fee Receipt</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#172033}.receipt{max-width:650px;margin:auto;border:1px solid #dbe2ea;border-radius:12px;padding:28px}.head{text-align:center;border-bottom:1px solid #ddd;padding-bottom:16px}.row{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid #eee}.total{font-size:20px;font-weight:bold}.foot{margin-top:30px;color:#667085;font-size:12px;text-align:center}@media print{button{display:none}}
+/* ===== CoachingOS visual assets: illustration layer ===== */
+.visual-hero{position:relative;display:flex;align-items:center;justify-content:space-between;gap:18px;overflow:hidden;padding:22px 24px;margin:0 0 17px;border-radius:20px;background:linear-gradient(115deg,#073c49 0%,#087b83 52%,#22b7aa 100%);color:#f2ffff;box-shadow:0 16px 36px rgba(4,94,103,.18)}
+.visual-hero:after{content:"";position:absolute;width:240px;height:240px;border:1px solid #ffffff24;border-radius:50%;right:80px;top:-145px;box-shadow:0 0 0 28px #ffffff0b,0 0 0 58px #ffffff08}
+.visual-hero-copy{position:relative;z-index:1;max-width:560px}
+.visual-hero .eyebrow{font-size:10px;letter-spacing:1.8px;font-weight:900;color:#a8f5e9;margin-bottom:7px}
+.visual-hero h2{font-size:clamp(20px,3vw,27px);line-height:1.2;margin:0 0 7px;color:#fff}
+.visual-hero p{margin:0;color:#d0fffa;font-size:12px}
+.visual-hero-art{position:relative;z-index:1;width:178px;min-width:120px;height:128px;display:grid;place-items:center}
+.visual-hero-art svg{width:100%;height:100%;filter:drop-shadow(0 12px 14px #003d4540)}
+.visual-hero .tag{background:#ffffff20;color:#eaffff;border:1px solid #ffffff35}
+.visual-mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 16px}
+.visual-mini{display:flex;align-items:center;gap:12px;padding:13px;border-radius:15px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow)}
+.visual-mini-icon{width:42px;height:42px;flex:0 0 42px;border-radius:13px;display:grid;place-items:center;background:#dcf8f2;color:#087f78;font-size:21px}
+.visual-mini b{display:block;font-size:12px}.visual-mini small{display:block;color:var(--muted);font-size:10px;margin-top:2px}
+.visual-empty{display:grid;justify-items:center;gap:8px;padding:22px 12px;text-align:center;color:var(--muted)}
+.visual-empty svg{width:116px;height:86px}
+@media(max-width:720px){.visual-hero{padding:18px}.visual-hero-art{width:112px;height:100px}.visual-mini-grid{grid-template-columns:1fr}.visual-mini{padding:10px}}
+</style><div class="receipt"><div class="head"><h2>'+safe(institute)+'</h2><h3>পেমেন্ট রসিদ</h3></div><div class="row"><span>শিক্ষার্থী</span><b>'+safe(fee.student)+'</b></div><div class="row"><span>ফি মাস</span><b>'+safe(fee.month)+'</b></div><div class="row"><span>তারিখ</span><b>'+safe(p.date)+'</b></div><div class="row"><span>রসিদ নম্বর</span><b>'+safe(p.receipt||"—")+'</b></div><div class="row"><span>পেমেন্ট মাধ্যম</span><b>'+safe(p.method)+'</b></div><div class="row total"><span>এই পেমেন্ট</span><b>৳'+money(p.amount)+'</b></div><div class="row"><span>এ পর্যন্ত মোট জমা</span><b>৳'+money(paidBefore)+'</b></div><div class="row"><span>বর্তমান বকেয়া</span><b>৳'+money(Math.max(0,Number(fee.amount||0)-paidBefore))+'</b></div><div class="foot">ধন্যবাদ। রসিদটি সংরক্ষণ করুন।<br><button onclick="window.print()">Print</button></div></div></html>');
  w.document.close();
 }
 
