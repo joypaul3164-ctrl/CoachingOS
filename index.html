@@ -1496,7 +1496,11 @@ function openForm(module,id=null){
   const value=record?.[key]??"";
   let control="";
 
-  if(type==="select"){
+  if(key==="student"&&["attendance","exams","fees"].includes(module)){
+   const students=rows.students||[];
+   const selected=record?.student_record_id||students.find(s=>String(s.name||"")===String(value))?.id||"";
+   control=`<select id="f_student" required><option value="">শিক্ষার্থী নির্বাচন করুন</option>${students.map(s=>`<option value="${esc(s.id)}" ${String(selected)===String(s.id)?"selected":""}>${esc(s.name||"নাম নেই")}${s.roll?" — "+esc(s.roll):""}</option>`).join("")}</select>`;
+  }else if(type==="select"){
    control=`<select id="f_${key}">
     <option value="">Select</option>
     ${(f[5]||[]).map(v=>`<option value="${esc(v)}" ${String(value)===v?"selected":""}>${esc(v)}</option>`).join("")}
@@ -1548,6 +1552,13 @@ async function submitForm(event,module){
    return toast(t("প্রয়োজনীয় তথ্য পূরণ করুন","Please fill required fields"));
   }
   data[f[0]]=el.value.trim();
+ }
+ if(["attendance","exams","fees"].includes(module)){
+  const studentId=$("f_student")?.value;
+  const student=(rows.students||[]).find(s=>String(s.id)===String(studentId));
+  if(!student)return toast("শিক্ষার্থী নির্বাচন করুন");
+  data.student_record_id=student.id;
+  data.student=student.name||"";
  }
 
  if(module==="fees"){
