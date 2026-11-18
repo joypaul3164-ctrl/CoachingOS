@@ -826,6 +826,7 @@ const modules={
  ["subject","বিষয়","Subject","text"],
  ["marks","প্রাপ্ত নম্বর","Marks obtained","number"],
  ["total","পূর্ণমান","Total marks","number"],
+ ["pass_marks","পাস নম্বর (ঐচ্ছিক)","Pass marks (optional)","number"],
  ["grade","গ্রেড","Grade","text"],
  ["exam_date","পরীক্ষার তারিখ","Exam date","date"]
  ]},
@@ -1153,7 +1154,7 @@ async function signOut(){if(sb)await sb.auth.signOut();user=null;activeInstitute
 
 async function saveRecord(module,data,id=null){
  try{
-  if(!canWrite(module))return toast("আপনার এই কাজের অনুমতি নেই");
+  if(!canWrite(module)){toast("আপনার এই কাজের অনুমতি নেই");return false;}
 
   if(cloud){
    const payload={
@@ -1171,7 +1172,7 @@ async function saveRecord(module,data,id=null){
     r=await sb.from(TABLE).insert(payload).select("id").single();
    }
 
-   if(r.error)return toast("Save error: "+r.error.message);
+   if(r.error){toast("Save error: "+r.error.message);return false;}
    const savedRecordId=id||r.data?.id||null;
    await loadAll();
    if(module==="attendance"&&data.status==="Present"&&savedRecordId){
@@ -1190,10 +1191,9 @@ async function saveRecord(module,data,id=null){
   editingId=null;
   closeModal();
   render();
-  toast("তথ্য সফলভাবে সংরক্ষণ হয়েছে");
+  toast("তথ্য সফলভাবে সংরক্ষণ হয়েছে");\n  return true;
  }catch(e){
-  toast("Save error: "+(e.message||e));
- }
+  toast("Save error: "+(e.message||e));\n  return false;\n }
 }
 
 async function enrollAdmission(id){
@@ -1204,9 +1204,7 @@ async function enrollAdmission(id){
  if(duplicate)return toast("একই নাম ও মোবাইল নম্বরের শিক্ষার্থী আগে থেকেই আছে");
  const student={name:app.name,phone:app.phone,guardian:app.guardian||"",guardian_phone:app.guardian_phone||"",class_name:app.class_name||"",admission_date:app.applied_date||new Date().toISOString().slice(0,10),status:"Active",admission_application_id:app.id};
  try{
-  await saveRecord("students",student);
-  const updated={...app,status:"Enrolled"};
-  await saveRecord("admissions",updated,app.id);
+  const created=await saveRecord("students",student);\n  if(created!==true)return;\n  const updated={...app,status:"Enrolled"};\n  const marked=await saveRecord("admissions",updated,app.id);\n  if(marked!==true)return;
   toast("আবেদন থেকে শিক্ষার্থী রেকর্ড তৈরি হয়েছে");
  }catch(e){toast("Enrollment failed: "+(e.message||e));}
 }
@@ -1933,7 +1931,7 @@ async function submitForm(event,module){
   const percent=(marks/total)*100;
   data.percentage=Number(percent.toFixed(2));
   data.grade=percent>=80?"A+":percent>=70?"A":percent>=60?"A-":percent>=50?"B":percent>=40?"C":"F";
-  data.result_status=percent>=40?"Pass":"Fail";
+  const passLimit=Number(data.pass_marks||total*0.4);\n  if(passLimit<0||passLimit>total)return toast("পাস নম্বর ০ থেকে পূর্ণমানের মধ্যে হতে হবে");\n  data.result_status=marks>=passLimit?"Pass":"Fail";
  }
  if(module==="exam_plans"){
   const total=Number(data.total),pass=Number(data.pass_marks);
