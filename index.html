@@ -227,6 +227,7 @@ tbody tr:hover{background:#f7f9ff}
  .panel{padding:15px;border-radius:15px}
  .sidebar{box-shadow:18px 0 50px rgba(4,10,29,.35)}
 }
+.login-status{display:none;margin-top:13px;padding:11px 12px;border-radius:11px;font-size:12px;line-height:1.5;overflow-wrap:anywhere}.login-status.show{display:block}.login-status.info{display:block;background:#eaf5ff;color:#174d78;border:1px solid #c9e3fa}.login-status.error{display:block;background:#fff0f1;color:#a52e43;border:1px solid #f1cbd2}.login-status.success{display:block;background:#e8f8f1;color:#176e51;border:1px solid #ccebdc}.login-btn-loading{display:inline-flex;align-items:center;justify-content:center;gap:9px}.login-spinner{width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;display:inline-block;animation:loginSpin .7s linear infinite}@keyframes loginSpin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){
  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
 }
@@ -603,6 +604,7 @@ tbody tr:hover{background:#f4fbf8}
   <button class="btn fullbtn" onclick="signIn()" id="loginBtn">Sign In / লগইন</button>
   <button class="btn secondary fullbtn" onclick="signUp()" id="signupBtn">Create Admin / Sign Up</button>
   <button class="btn ghost fullbtn" onclick="resetPassword()">Forgot Password?</button>
+  <div id="loginStatus" class="login-status" role="status" aria-live="polite"></div>
   <div class="hint" id="loginHint">প্রথমবার হলে Create Admin / Sign Up চাপুন। ইমেইল verification চালু থাকলে inbox থেকে verify করে Sign In করুন।</div>
  </div>
 </section>
@@ -857,18 +859,36 @@ async function signUp(){
  finally{$("signupBtn").disabled=false;}
 }
 
+function loginFeedback(message,type="info"){
+ const el=$("loginStatus");if(!el)return;
+ el.textContent=message||"";
+ el.className=message?"login-status show "+type:"login-status";
+}
 async function signIn(){
+ const btn=$("loginBtn"),original=btn?.textContent||"Sign In / লগইন";
  try{
-  const email=$("email").value.trim(),password=$("password").value;
-  if(!email||!password)return toast("Email ও Password লিখুন");
-  if(!sb&&!(await initCloud()))return;
+  const email=$("email")?.value.trim()||"",password=$("password")?.value||"";
+  if(!email||!password){loginFeedback("Email ও Password—দুটিই লিখুন।","error");return;}
+  if(!$("email").checkValidity()){loginFeedback("সঠিক Email address লিখুন।","error");$("email").focus();return;}
+  if(btn){btn.disabled=true;btn.setAttribute("aria-busy","true");btn.innerHTML='<span class="login-spinner" aria-hidden="true"></span> লগইন হচ্ছে…';btn.classList.add("login-btn-loading");}
+  loginFeedback("Supabase-এর সঙ্গে নিরাপদ সংযোগ করে লগইন যাচাই করা হচ্ছে…","info");
+  if(!sb&&!(await initCloud()))throw new Error("Supabase সংযোগ তৈরি হয়নি। পেজ Reload করে আবার চেষ্টা করুন।");
+  if(!sb)throw new Error("Supabase client পাওয়া যায়নি।");
   const r=await sb.auth.signInWithPassword({email,password});
-  if(r.error)return toast("Login failed: "+r.error.message);
+  if(r.error)throw new Error(r.error.message);
+  loginFeedback("লগইন সফল। আপনার প্রতিষ্ঠানের তথ্য লোড হচ্ছে…","success");
   const verified=await sb.auth.getUser();
-  if(verified.error||!verified.data?.user)throw new Error("Authenticated account could not be verified");
+  if(verified.error||!verified.data?.user)throw new Error("লগইন যাচাই করা যায়নি। আবার চেষ্টা করুন।");
   user=verified.data.user;
   await afterAuth();
- }catch(e){toast("Login error: "+(e.message||e));}
+  if(!$("appView")?.classList.contains("hidden"))loginFeedback("");
+ }catch(e){
+  const message="লগইন সম্পন্ন হয়নি: "+(e?.message||"অজানা সমস্যা");
+  loginFeedback(message,"error");
+  toast(message);
+ }finally{
+  if(btn){btn.disabled=false;btn.removeAttribute("aria-busy");btn.textContent=original;btn.classList.remove("login-btn-loading");}
+ }
 }
 async function resetPassword(){
  const emailInput=$("email");
@@ -988,7 +1008,11 @@ async function afterAuth(){
   portalMode=false;
   await loadAll();
   showApp();
- }catch(e){toast("Account setup error: "+(e.message||e));}
+ }catch(e){
+  const message="Account setup error: "+(e.message||e);
+  if($("loginView")&&!$("loginView").classList.contains("hidden"))loginFeedback("লগইন হয়েছে, কিন্তু অ্যাকাউন্ট/প্রতিষ্ঠানের তথ্য লোড হয়নি: "+(e.message||e),"error");
+  toast(message);
+ }
 }
 function togglePortalMode(){
  if(!portalProfiles.length||!institutes.length)return;
