@@ -61,5 +61,10 @@ jobs:
           assert.match(save, /\.select\("id"\)\.maybeSingle\(\)/, "Updates must return the affected record id");
           assert.match(save, /if\(id&&!r\.data\?\.id\)/, "RLS-filtered zero-row updates must not report success");
 
+
+          const payrollMigration = fs.readFileSync('supabase/migrations/20261118_accountant_payroll_rls.sql', 'utf8');
+          assert.match(payrollMigration, /m\.role = 'accountant' and _record_type in \('fees','expenses','payroll'\)/, 'Accountant payroll read/write RLS must be enabled');
+          assert.equal((payrollMigration.match(/create or replace function public\.can_(?:view|manage)_coachingos_records/g) || []).length, 2, 'Both read and write RLS helpers must be replaced');
+          console.log('PASS: Accountant payroll read/write RLS migration is present and scoped to active institute membership.');
           console.log('PASS: admission approval gate, duplicate guard, retry-safe linkage, exam bounds, grade/result calculation, permissions, and update-result verification are present.');
           JS
