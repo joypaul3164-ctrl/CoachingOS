@@ -120,7 +120,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $$
 declare
   caller_role text;
   target_user_id uuid;
@@ -203,7 +203,7 @@ begin
 
   return link_id;
 end;
-$;
+$$;
 
 revoke all on function public.admin_link_coachingos_portal_account(uuid,uuid,text,text) from public;
 grant execute on function public.admin_link_coachingos_portal_account(uuid,uuid,text,text) to authenticated;
