@@ -1195,7 +1195,8 @@ async function saveRecord(module,data,id=null){
   return true;
  }catch(e){
   toast("Save error: "+(e.message||e));
-  return false;\n }
+  return false;
+ }
 }
 
 async function enrollAdmission(id){
