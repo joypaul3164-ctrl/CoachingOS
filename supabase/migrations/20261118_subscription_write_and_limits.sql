@@ -78,6 +78,8 @@ begin
       return new;
     end if;
 
+    perform pg_advisory_xact_lock(hashtextextended(new.institute_id::text, 0));
+
     if v_plan.max_records is not null then
       select count(*) into v_count
       from public.coachingos_records r
@@ -111,6 +113,10 @@ begin
     where s.institute_id = new.institute_id
     limit 1;
 
+    if found then
+      perform pg_advisory_xact_lock(hashtextextended(new.institute_id::text, 0));
+    end if;
+
     if found and v_plan.max_members is not null then
       select count(*) into v_count
       from public.institute_members m
@@ -137,5 +143,5 @@ before insert or update on public.institute_members
 for each row execute function public.enforce_coachingos_subscription_limits();
 
 revoke all on function public.coachingos_subscription_write_allowed(uuid) from public, anon;
-grant execute on function public.coachingos_subscription_write_allowed(uuid) to authenticated, service_role;
+revoke all on function public.coachingos_subscription_write_allowed(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.enforce_coachingos_subscription_limits() from public, anon, authenticated;
