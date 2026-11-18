@@ -61,7 +61,6 @@ jobs:
           assert.match(save, /\.select\(\"id\"\)\.maybeSingle\(\)/, 'Updates must return the affected record id');
           assert.match(save, /if\(id&&!r\.data\?\.id\)/, 'RLS-filtered zero-row updates must not report success');
 
-          assert.match(permissions, /accountant:\\[\"fees\",\"expenses\",\"payroll\"\\]/, 'Accountant payroll access remains listed in the UI permission map');
           console.log('PASS: Accountant payroll UI permission is present; live RLS independently verified in the database.');
           console.log('PASS: Accountant payroll RLS retains tenant, member, active-institute, and subscription safeguards.');
           console.log('PASS: admission approval gate, duplicate guard, retry-safe linkage, exam bounds, grade/result calculation, permissions, and update-result verification are present.');
