@@ -296,4 +296,57 @@ begin
 end;
 $$;
 
+-- CoachingOS final security and performance reconciliation
+-- Idempotent, non-destructive: adds missing FK indexes and tightens RPC execution.
+-- No institute/student/business records are modified.
 
+create index if not exists institute_portal_links_student_record_idx
+  on public.institute_portal_links(student_record_id);
+create index if not exists institute_portal_links_created_by_idx
+  on public.institute_portal_links(created_by);
+create index if not exists institutes_owner_id_idx
+  on public.institutes(owner_id);
+create index if not exists institute_invitations_created_by_idx
+  on public.institute_invitations(created_by);
+create index if not exists institute_staff_invitations_created_by_idx
+  on public.institute_staff_invitations(created_by);
+create index if not exists institute_staff_invitations_accepted_by_idx
+  on public.institute_staff_invitations(accepted_by);
+create index if not exists institute_notifications_institute_id_idx
+  on public.institute_notifications(institute_id);
+create index if not exists institute_notifications_actor_user_id_idx
+  on public.institute_notifications(actor_user_id);
+
+-- Enforce one Student profile per account per institute at the database boundary.
+-- The existing account-link RPC separately blocks mixing Student and Parent/Guardian.
+create unique index if not exists institute_portal_links_one_student_profile
+  on public.institute_portal_links(institute_id,user_id)
+  where relationship = 'student';
+
+-- Remove anonymous/public direct execution from SECURITY DEFINER functions.
+-- Authenticated access remains for application RPCs and RLS helper functions.
+-- Trigger functions are not directly executable by browser roles.
+do $$
+declare
+  fn record;
+begin
+  for fn in
+    select p.oid::regprocedure as signature,
+           p.prorettype = 'trigger'::regtype as is_trigger
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.prosecdef
+  loop
+    execute format('revoke execute on function %s from public, anon', fn.signature);
+    if fn.is_trigger then
+      execute format('revoke execute on function %s from authenticated', fn.signature);
+    else
+      execute format('grant execute on function %s to authenticated', fn.signature);
+    end if;
+  end loop;
+end;
+$$;
+
+-- Enable leaked-password protection separately in Supabase Dashboard:
+-- Authentication -> Settings -> Password Security -> Leaked password protection.
