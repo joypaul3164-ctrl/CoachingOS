@@ -1,0 +1,63 @@
+name: CoachingOS Browser Smoke Tests
+
+on:
+  push:
+    branches: [feature/showcase-smart-exam-admission]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Chromium and Playwright
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Start local static server
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/coachingos-http.log 2>&1 &
+          echo $! >/tmp/coachingos-http.pid
+          for i in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/coachingos-http.log
+          exit 1
+      - name: Run browser smoke checks
+        run: |
+          node --input-type=commonjs <<'JS'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage();
+            const errors = [];
+            page.on('pageerror', error => errors.push(error.message));
+            await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+            await page.locator('#loginView').waitFor({ state: 'visible' });
+            if (!(await page.title()).includes('CoachingOS')) throw new Error('Unexpected page title');
+            await page.locator('#email').waitFor({ state: 'visible' });
+            await page.locator('#password').waitFor({ state: 'visible' });
+            const login = page.locator('#loginBtn');
+            await login.waitFor({ state: 'visible' });
+            await login.click();
+            const status = await page.locator('#loginStatus').innerText();
+            if (!status.includes('Email') || !status.includes('Password')) {
+              throw new Error('Empty-login validation did not appear: ' + status);
+            }
+            if (errors.length) throw new Error('Browser page errors: ' + errors.join(' | '));
+            console.log('PASS: page loads, login UI renders, and empty-login validation works.');
+            await browser.close();
+          })().catch(error => { console.error(error); process.exit(1); });
+          JS
