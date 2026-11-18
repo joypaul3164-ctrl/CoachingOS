@@ -13,9 +13,9 @@ permissions:
 
 jobs:
   restore:
-    name: Restore backup migrations into isolated local Supabase
+    name: Restore preserved CoachingOS schema in isolated Supabase
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - name: Checkout workflow branch
         uses: actions/checkout@v4
@@ -32,32 +32,63 @@ jobs:
         with:
           version: latest
 
-      - name: Initialize disposable local Supabase project
+      - name: Build a complete, ordered migration set
         shell: bash
         run: |
+          set -euo pipefail
+          test -s backup-source/supabase/schema.sql
+          mapfile -t source_migrations < <(find backup-source/supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
+          test "${#source_migrations[@]}" -eq 25
+
           mkdir -p restore-lab
           cd restore-lab
           supabase init
           mkdir -p supabase/migrations
-          cp ../backup-source/supabase/migrations/*.sql supabase/migrations/
-          test "$(find supabase/migrations -maxdepth 1 -name '*.sql' | wc -l)" -eq 25
+
+          # The preserved migration scripts depend on the original CoachingOS
+          # base tables. Restore that base schema first, before feature migrations.
+          cp ../backup-source/supabase/schema.sql supabase/migrations/20261116000000_coachingos_base_schema.sql
+
+          declare -A sequence_by_day=()
+          for source in "${source_migrations[@]}"; do
+            filename="${source##*/}"
+            day="${filename%%_*}"
+            migration_name="${filename#*_}"
+            case "$day" in
+              20261117|20261118) ;;
+              *) echo "Unexpected migration date prefix: $filename"; exit 1 ;;
+            esac
+            sequence=$(( ${sequence_by_day[$day]:-0} + 1 ))
+            sequence_by_day[$day]=$sequence
+            version="${day}$(printf '%06d' "$sequence")"
+            cp "$source" "supabase/migrations/${version}_${migration_name}"
+          done
+
+          count=$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l)
+          test "$count" -eq 26
+          versions=$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort | cut -d_ -f1)
+          duplicates=$(printf '%s\n' "$versions" | sort | uniq -d)
+          test -z "$duplicates"
+          echo "Prepared base schema plus 25 uniquely versioned migrations."
 
       - name: Start isolated local Supabase stack
         working-directory: restore-lab
         run: supabase start
 
-      - name: Restore all preserved SQL migrations
+      - name: Restore base schema and all preserved migrations
         working-directory: restore-lab
         run: supabase db reset --local
 
-      - name: Verify restored database structure
+      - name: Verify restored schema and core security
         working-directory: restore-lab
         shell: bash
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y postgresql-client
           export PGPASSWORD=postgres
           DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+
           TABLES=$(psql "$DB_URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'")
           FUNCTIONS=$(psql "$DB_URL" -Atc "select count(*) from information_schema.routines where routine_schema='public' and routine_type='FUNCTION'")
           RLS_TABLES=$(psql "$DB_URL" -Atc "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and c.relrowsecurity")
@@ -67,6 +98,15 @@ jobs:
           test "$TABLES" -gt 0
           test "$FUNCTIONS" -gt 0
           test "$RLS_TABLES" -gt 0
+
+          for table in institutes institute_members coachingos_records; do
+            exists=$(psql "$DB_URL" -Atc "select to_regclass('public.$table') is not null")
+            test "$exists" = "t"
+            rls=$(psql "$DB_URL" -Atc "select relrowsecurity from pg_class where oid='public.$table'::regclass")
+            test "$rls" = "t"
+          done
+
+          echo "Core CoachingOS tables exist and have Row Level Security enabled."
 
       - name: Stop disposable local stack
         if: always()
