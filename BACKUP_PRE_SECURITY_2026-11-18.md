@@ -31,3 +31,21 @@
 
 ## Recovery limitations
 This Git backup preserves the source tree at the recorded commit and the SQL snapshot preserves public database structure (tables/columns, policies, functions, triggers, constraints, indexes, extensions). It is NOT a full live-data backup. It excludes student/guardian records, auth users/sessions, storage file bytes, project secrets, and SMS provider credentials. Full point-in-time data recovery must rely on Supabase managed backups/PITR or an authorized database export. Never commit secrets or personal records to GitHub.
+
+## Product-source inventory verified on 2026-11-18
+
+- Backup branch contains all 30 files currently present on `main`, plus the two backup artifacts above (32 files total).
+- Frontend/source HTML files: `index.html` (137,722 bytes; 2,223 lines) and `Chochings` (legacy-looking HTML file; retained unchanged pending owner review).
+- Supabase SQL source: `supabase/schema.sql`, `supabase/FINAL_SETUP.sql`, and 25 files under `supabase/migrations/`.
+- Edge Function source: `supabase/functions/guardian-attendance-notify/index.ts`.
+- Live Edge Function inspected: `guardian-attendance-notify`, ACTIVE version 5, JWT verification enabled. Its source is present in GitHub.
+- The live database migration history currently reports 15 applied migration entries. This is a separate count from the 25 SQL migration source files in the repository; do not assume every source file corresponds one-to-one with a currently recorded migration version.
+- No `.github/workflows/` files, `supabase/config.toml`, package manifest/lockfile, or separate frontend asset directory were found in the current repository tree. The app appears to keep its main UI/code in the HTML file; this should be reviewed before claiming the deployment can be rebuilt from source alone.
+- The public-schema snapshot is structural only. It does not contain tenant operational records or auth users, and it is not a complete Supabase project export.
+
+## Recovery items not exportable through the connected read-only tools
+
+- GitHub Actions secrets and Supabase project secrets (values) were not retrieved and must never be committed here. Only variable names/configuration references may be documented.
+- Supabase dashboard-level Auth, API, Storage, network, billing, and project settings were not exported.
+- Storage object bytes and any external provider account/configuration are not included.
+- No independent restore test has been performed. This is a source/schema preservation checkpoint, not a verified full disaster-recovery package.
