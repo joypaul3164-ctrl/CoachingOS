@@ -33,5 +33,5 @@ begin
 end;
 $function$;
 
-revoke all on function public.admin_reconcile_coachingos_subscription_status() from public, anon;
+revoke all on function public.admin_reconcile_coachingos_subscription_status() from public, anon, service_role;
 grant execute on function public.admin_reconcile_coachingos_subscription_status() to authenticated;
