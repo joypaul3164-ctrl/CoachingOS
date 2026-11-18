@@ -1,0 +1,9 @@
+{
+  "appId": "com.joypaul3164.coachingos",
+  "appName": "CoachingOS",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": false
+  }
+}
