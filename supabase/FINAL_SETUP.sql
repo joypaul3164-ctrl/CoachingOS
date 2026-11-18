@@ -678,3 +678,60 @@ end;
 $$;
 revoke all on function public.claim_coachingos_guardian_deliveries(uuid,uuid) from public, anon, authenticated;
 grant execute on function public.claim_coachingos_guardian_deliveries(uuid,uuid) to service_role;
+
+
+-- Safer OLD-record access for INSERT versus UPDATE trigger executions.
+create or replace function public.enqueue_guardian_attendance_delivery()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  student_id uuid;
+  student_data jsonb;
+  guardian_email text;
+  guardian_phone text;
+  consent text;
+  event_token text;
+  email_status text;
+  sms_status text;
+begin
+  if new.record_type <> 'attendance'
+     or coalesce(new.record_data->>'status','') <> 'Present' then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' then
+    if old.record_type = 'attendance'
+       and coalesce(old.record_data->>'status','') = 'Present' then
+      return new;
+    end if;
+  end if;
+  student_id := nullif(new.record_data->>'student_record_id','')::uuid;
+  event_token := new.id::text || ':' || coalesce(new.updated_at, new.created_at, pg_catalog.now());
+  if student_id is not null then
+    select s.record_data into student_data
+    from public.coachingos_records s
+    where s.id=student_id and s.institute_id=new.institute_id and s.record_type='students'
+    limit 1;
+  end if;
+  guardian_email := nullif(pg_catalog.btrim(coalesce(student_data->>'guardian_email','')), '');
+  guardian_phone := nullif(pg_catalog.btrim(coalesce(student_data->>'guardian_phone','')), '');
+  consent := lower(pg_catalog.btrim(coalesce(student_data->>'guardian_report_consent','')));
+  email_status := case when student_data is null then 'blocked' when consent <> 'yes' then 'skipped_consent' when guardian_email is null then 'skipped_no_contact' else 'queued' end;
+  sms_status := case when student_data is null then 'blocked' when consent <> 'yes' then 'skipped_consent' when guardian_phone is null then 'skipped_no_contact' else 'queued' end;
+  insert into public.guardian_delivery_logs(institute_id,attendance_record_id,student_record_id,event_key,channel,recipient_masked,status,error_message)
+  values
+   (new.institute_id,new.id,student_id,event_token,'email',
+    case when guardian_email is null then null else pg_catalog.left(guardian_email,1)||'***@'||coalesce(pg_catalog.split_part(guardian_email,'@',2),'***') end,
+    email_status,
+    case when student_data is null then 'student_record_not_found' when consent <> 'yes' then 'guardian_consent_not_yes' when guardian_email is null then 'guardian_email_missing' end),
+   (new.institute_id,new.id,student_id,event_token,'sms',
+    case when guardian_phone is null then null else '***'||pg_catalog.right(regexp_replace(guardian_phone,'[^0-9]','','g'),4) end,
+    sms_status,
+    case when student_data is null then 'student_record_not_found' when consent <> 'yes' then 'guardian_consent_not_yes' when guardian_phone is null then 'guardian_phone_missing' end)
+  on conflict(event_key,channel) do nothing;
+  return new;
+end;
+$$;
+revoke all on function public.enqueue_guardian_attendance_delivery() from public, anon, authenticated;
