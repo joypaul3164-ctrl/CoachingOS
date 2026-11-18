@@ -601,7 +601,7 @@ tbody tr:hover{background:#f4fbf8}
 .visual-hero-art{position:relative;z-index:1;width:178px;min-width:120px;height:128px;display:grid;place-items:center}
 .visual-hero-art svg{width:100%;height:100%;filter:drop-shadow(0 12px 14px #003d4540)}
 .visual-hero .tag{background:#ffffff20;color:#eaffff;border:1px solid #ffffff35}
-.visual-mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 16px}
+.visual-mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:0 0 16px}
 .visual-mini{display:flex;align-items:center;gap:12px;padding:13px;border-radius:15px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow)}
 .visual-mini-icon{width:42px;height:42px;flex:0 0 42px;border-radius:13px;display:grid;place-items:center;background:#dcf8f2;color:#087f78;font-size:21px}
 .visual-mini b{display:block;font-size:12px}.visual-mini small{display:block;color:var(--muted);font-size:10px;margin-top:2px}
@@ -707,6 +707,8 @@ th{background:#eff8f7;color:#52717c}
    <button data-page="attendance" onclick="go('attendance')"><span class="ico">✓</span><span data-en="Attendance" data-bn="উপস্থিতি">Attendance</span></button>
    <button data-page="guardian_delivery" id="guardianDeliveryNav" class="hidden" onclick="go('guardian_delivery')"><span class="ico">✉</span><span>Guardian Delivery Logs</span></button>
    <button data-page="exams" onclick="go('exams')"><span class="ico">✎</span><span data-en="Exams & Results" data-bn="পরীক্ষা ও ফলাফল">Exams & Results</span></button>
+   <button data-page="exam_plans" onclick="go(&quot;exam_plans&quot;)"><span class="ico">✦</span><span>Smart Exam Automation</span><span class="exclusive-badge">EXCLUSIVE</span></button>
+   <button data-page="admissions" onclick="go(&quot;admissions&quot;)"><span class="ico">↗</span><span data-en="Online Admission" data-bn="অনলাইন ভর্তি">Online Admission</span></button>
    <div class="nav-label">FINANCE</div>
    <button data-page="fees" onclick="go('fees')"><span class="ico">৳</span><span data-en="Fees & Payments" data-bn="বেতন ও পেমেন্ট">Fees & Payments</span></button>
    <button data-page="expenses" onclick="go('expenses')"><span class="ico">↗</span><span data-en="Expenses" data-bn="খরচ">Expenses</span></button>
@@ -796,6 +798,27 @@ const modules={
  ["date","তারিখ","Date","date",1],
  ["status","উপস্থিতি","Attendance","select",1,["Present","Absent","Late","Leave"]],
  ["note","নোট","Note","text"]
+ ]},
+ admissions:{title:"অনলাইন ভর্তি",en:"Online Admission",icon:"↗",fields:[
+ ["application_no","আবেদন নম্বর","Application No.","text",1],
+ ["name","শিক্ষার্থীর নাম","Applicant name","text",1],
+ ["phone","শিক্ষার্থীর মোবাইল","Applicant phone","tel",1],
+ ["guardian","অভিভাবকের নাম","Guardian name","text"],
+ ["guardian_phone","অভিভাবকের মোবাইল","Guardian phone","tel"],
+ ["class_name","ভর্তির শ্রেণি / ব্যাচ","Applying class / batch","text",1],
+ ["applied_date","আবেদনের তারিখ","Application date","date",1],
+ ["status","আবেদনের অবস্থা","Application status","select",1,["Pending","Under Review","Approved","Rejected","Enrolled"]],
+ ["note","নোট","Notes","textarea"]
+ ]},
+ exam_plans:{title:"Smart Exam Automation",en:"Smart Exam Automation",icon:"✦",fields:[
+ ["exam","পরীক্ষার নাম","Exam name","text",1],
+ ["class_name","শ্রেণি / ব্যাচ","Class / batch","text",1],
+ ["subject","বিষয়","Subject","text",1],
+ ["exam_date","পরীক্ষার তারিখ","Exam date","date",1],
+ ["total","পূর্ণমান","Total marks","number",1],
+ ["pass_marks","পাস নম্বর","Pass marks","number",1],
+ ["status","অবস্থা","Status","select",1,["Draft","Scheduled","Completed","Published"]],
+ ["instructions","নির্দেশনা","Instructions","textarea"]
  ]},
  exams:{title:"পরীক্ষা ও ফলাফল",en:"Exams & Results",icon:"✎",fields:[
  ["exam","পরীক্ষার নাম","Exam name","text",1],
@@ -1012,7 +1035,7 @@ async function updateRecoveredPassword(){
 }
 function canWrite(module=null){
  if(["owner","admin","manager"].includes(activeRole))return true;
- const permissions={teacher:["batches","routine","attendance","exams"],accountant:["fees","expenses","payroll"],receptionist:["students","attendance","fees"],staff:[]};
+ const permissions={teacher:["batches","routine","attendance","exams","exam_plans"],accountant:["fees","expenses","payroll"],receptionist:["students","attendance","fees","admissions"],staff:[]};
  return module?((permissions[activeRole]||[]).includes(module)):false;
 }
 function canManageStaff(){return activeRole==="owner"||activeRole==="admin";}
@@ -1171,6 +1194,21 @@ async function saveRecord(module,data,id=null){
  }catch(e){
   toast("Save error: "+(e.message||e));
  }
+}
+
+async function enrollAdmission(id){
+ if(!canWrite("admissions")||!canWrite("students"))return toast("ভর্তি অনুমোদন ও শিক্ষার্থী তৈরির অনুমতি প্রয়োজন");
+ const app=(rows.admissions||[]).find(x=>String(x.id)===String(id));
+ if(!app||app.status!=="Approved")return toast("শুধু Approved আবেদন এনরোল করা যাবে");
+ const duplicate=(rows.students||[]).some(x=>String(x.phone||"").trim()===String(app.phone||"").trim()&&String(x.name||"").trim().toLowerCase()===String(app.name||"").trim().toLowerCase());
+ if(duplicate)return toast("একই নাম ও মোবাইল নম্বরের শিক্ষার্থী আগে থেকেই আছে");
+ const student={name:app.name,phone:app.phone,guardian:app.guardian||"",guardian_phone:app.guardian_phone||"",class_name:app.class_name||"",admission_date:app.applied_date||new Date().toISOString().slice(0,10),status:"Active",admission_application_id:app.id};
+ try{
+  await saveRecord("students",student);
+  const updated={...app,status:"Enrolled"};
+  await saveRecord("admissions",updated,app.id);
+  toast("আবেদন থেকে শিক্ষার্থী রেকর্ড তৈরি হয়েছে");
+ }catch(e){toast("Enrollment failed: "+(e.message||e));}
 }
 
 async function deleteRecord(module,id){
@@ -1428,6 +1466,8 @@ function renderDashboard(){
   <div class="visual-mini"><span class="visual-mini-icon">🎓</span><div><b>${t("শিক্ষার্থী ব্যবস্থাপনা","Student Management")}</b><small>${t("প্রোফাইল ও একাডেমিক তথ্য","Profiles and academic records")}</small></div></div>
   <div class="visual-mini"><span class="visual-mini-icon" style="background:#e6edff;color:#5266d9">📅</span><div><b>${t("উপস্থিতি ও রুটিন","Attendance & Routine")}</b><small>${t("দৈনিক ক্লাস পরিচালনা","Daily class operations")}</small></div></div>
   <div class="visual-mini"><span class="visual-mini-icon" style="background:#fff0db;color:#bd7b25">💳</span><div><b>${t("ফি ও হিসাব","Fees & Finance")}</b><small>${t("আদায় ও বকেয়ার সারাংশ","Collections and dues")}</small></div></div>
+  <div class="visual-mini"><span class="visual-mini-icon">📝</span><div><b>Online Admission</b><small>আবেদন যাচাই ও ভর্তি ব্যবস্থাপনা</small></div></div>
+  <div class="visual-mini"><span class="visual-mini-icon" style="background:#e6edff;color:#5266d9">✦</span><div><b>Smart Exam Automation</b><small>EXCLUSIVE • নম্বর যাচাই ও গ্রেড গণনা</small></div></div>
  </div>
  <div class="welcome">
   <div><h1>${t("ড্যাশবোর্ডের সারাংশ","Dashboard Overview")}</h1><div class="muted">${t("আপনার প্রতিষ্ঠানের সার্বিক চিত্র","Your institute overview")}</div></div>
@@ -1727,6 +1767,7 @@ function renderModule(module){
 
  const list=rows[module]||[];
  const searchId="search_"+module;
+ const spotlight=module==="admissions"?`<section class="module-spotlight admission-spotlight"><div><span class="spotlight-kicker">ADMISSION WORKFLOW</span><h2>ভর্তি আবেদন, যাচাই ও এনরোলমেন্ট—এক জায়গায়</h2><p>আবেদন গ্রহণের তথ্য রাখুন, যাচাই করুন এবং অনুমোদিত আবেদনকে শিক্ষার্থী রেকর্ডে যুক্ত করুন।</p></div><div class="spotlight-art" aria-hidden="true"><svg viewBox="0 0 160 120" fill="none"><rect x="23" y="12" width="86" height="96" rx="12" fill="#fff" opacity=".95"/><path d="M42 36h48M42 49h48M42 62h31" stroke="#278d9a" stroke-width="5" stroke-linecap="round"/><circle cx="111" cy="82" r="25" fill="#b9f1e5"/><path d="m100 82 8 8 15-18" stroke="#087f75" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg></div></section>`:module==="exam_plans"?`<section class="module-spotlight exam-spotlight"><div><span class="spotlight-kicker">EXCLUSIVE • SMART EXAM AUTOMATION</span><h2>পরীক্ষার পরিকল্পনা থেকে ফলাফল—আরও গোছানোভাবে</h2><p>পরীক্ষার সময়সূচি, পূর্ণমান ও পাস নম্বর সংরক্ষণ করুন। ফল এন্ট্রির সময় নম্বর যাচাই ও গ্রেড স্বয়ংক্রিয়ভাবে গণনা হবে।</p></div><div class="spotlight-art" aria-hidden="true"><svg viewBox="0 0 160 120" fill="none"><rect x="25" y="12" width="82" height="96" rx="12" fill="#fff" opacity=".95"/><path d="M45 35h42M45 50h26M45 65h38" stroke="#4366d8" stroke-width="5" stroke-linecap="round"/><circle cx="112" cy="78" r="28" fill="#d7e3ff"/><path d="m100 78 8 9 17-21" stroke="#3f5ed0" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg></div></section>`:"";
  const payrollSummary=module==="payroll"?`
   <div class="grid" style="margin-bottom:14px">
    ${statCard("মোট নিট বেতন",money(list.reduce((n,x)=>n+Number(x.net_salary||0),0)),"এই তালিকার সব মাস","৳")}
@@ -1751,6 +1792,7 @@ function renderModule(module){
   ${canWrite(module)?`<button class="btn" onclick="openForm('${module}')">＋ ${t("নতুন যোগ করুন","Add New")}</button>`:""}
  </div>
 
+ ${spotlight}
  ${payrollSummary}
  ${feeSummary}
  <div class="panel">
@@ -1783,6 +1825,7 @@ function moduleTable(module,list){
      return `<td>${esc(val)}</td>`;
     }).join("")}
     <td>
+     ${module==="admissions"&&x.status==="Approved"&&canWrite("students")?`<button class="btn good small" onclick="enrollAdmission(&quot;${esc(x.id)}&quot;)">শিক্ষার্থী করুন</button>`:""}
      ${module==="fees"?`
       <button class="btn good small" onclick="openFeePayment('${esc(x.id)}')" ${Number(x.due||0)<=0||!canWrite("fees")?"disabled":""}>পেমেন্ট নিন</button>
       <button class="btn secondary small" onclick="showFeeHistory('${esc(x.id)}')">ইতিহাস</button>
@@ -1884,6 +1927,18 @@ async function submitForm(event,module){
   data.student=student.name||"";
  }
 
+ if(module==="exams"){
+  const marks=Number(data.marks||0),total=Number(data.total||0);
+  if(!Number.isFinite(marks)||!Number.isFinite(total)||total<=0||marks<0||marks>total)return toast("প্রাপ্ত নম্বর ০ থেকে পূর্ণমানের মধ্যে হতে হবে");
+  const percent=(marks/total)*100;
+  data.percentage=Number(percent.toFixed(2));
+  data.grade=percent>=80?"A+":percent>=70?"A":percent>=60?"A-":percent>=50?"B":percent>=40?"C":"F";
+  data.result_status=percent>=40?"Pass":"Fail";
+ }
+ if(module==="exam_plans"){
+  const total=Number(data.total),pass=Number(data.pass_marks);
+  if(!Number.isFinite(total)||!Number.isFinite(pass)||total<=0||pass<0||pass>total)return toast("পূর্ণমান ও পাস নম্বর সঠিকভাবে দিন");
+ }
  if(module==="fees"){
   const amount=Number(data.amount||0);
   const paid=Number(data.paid||0);
@@ -1970,6 +2025,19 @@ body{font-family:Arial,sans-serif;padding:32px;color:#172033}
 .total{font-size:20px;font-weight:bold}
 .foot{margin-top:30px;color:#667085;font-size:12px;text-align:center}
 @media print{button{display:none}}
+
+/* ===== Admission + Exclusive Smart Exam modules ===== */
+.exclusive-badge{margin-left:auto;font-size:8px;letter-spacing:.6px;font-weight:950;padding:3px 6px;border-radius:6px;background:linear-gradient(110deg,#fff0c2,#ffd978);color:#684300;white-space:nowrap}
+.module-spotlight{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 24px;border-radius:19px;margin:0 0 16px;color:#fff;overflow:hidden;position:relative}
+.module-spotlight h2{font-size:clamp(18px,2.6vw,25px);margin:5px 0 6px;color:#fff}
+.module-spotlight p{margin:0;max-width:650px;color:#e7f7ff;font-size:12px;line-height:1.7}
+.admission-spotlight{background:linear-gradient(115deg,#124d65,#168a9b 58%,#35b9aa)}
+.exam-spotlight{background:linear-gradient(115deg,#252e69,#4c59b6 58%,#6c78df)}
+.spotlight-kicker{font-size:9px;letter-spacing:1.5px;font-weight:950;color:#bdf8eb}
+.spotlight-art{width:145px;min-width:100px;height:112px;display:grid;place-items:center}
+.spotlight-art svg{width:100%;height:100%;filter:drop-shadow(0 10px 12px #001c3333)}
+@media(max-width:600px){.module-spotlight{padding:17px}.spotlight-art{width:90px;height:85px}.exclusive-badge{font-size:7px;padding:2px 4px}}
+
 </style><div class="receipt"><div class="head"><h2>${safe(institute)}</h2><h3>পেমেন্ট রসিদ</h3></div><div class="row"><span>শিক্ষার্থী</span><b>${safe(fee.student)}</b></div><div class="row"><span>ফি মাস</span><b>${safe(fee.month)}</b></div><div class="row"><span>তারিখ</span><b>${safe(p.date)}</b></div><div class="row"><span>রসিদ নম্বর</span><b>${safe(p.receipt||"—")}</b></div><div class="row"><span>পেমেন্ট মাধ্যম</span><b>${safe(p.method)}</b></div><div class="row total"><span>এই পেমেন্ট</span><b>৳${money(p.amount)}</b></div><div class="row"><span>এ পর্যন্ত মোট জমা</span><b>৳${money(paidBefore)}</b></div><div class="row"><span>বর্তমান বকেয়া</span><b>৳${money(Math.max(0,Number(fee.amount||0)-paidBefore))}</b></div><div class="foot">ধন্যবাদ। রসিদটি সংরক্ষণ করুন।<br><button onclick="window.print()">Print</button></div></div></html>`);
  w.document.close();
 }
