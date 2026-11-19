@@ -684,7 +684,7 @@ th{background:#eff8f7;color:#52717c}
   <h1 id="loginTitle">স্বাগতম</h1>
   <div class="muted" id="loginSub">আপনার প্রতিষ্ঠানের ব্যবস্থাপনা শুরু করতে লগইন করুন।</div>
   <div class="field"><label>Email address</label><input id="email" type="email" autocomplete="username" placeholder="admin@example.com"></div>
-  <div class="field"><label>Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Password"></div>
+  <div class="field"><label>Password</label><input id="password" type="password" minlength="12" autocomplete="current-password" placeholder="Password"></div>
   <button class="btn fullbtn" type="button" id="loginBtn">Sign In / লগইন</button>
   <button class="btn secondary fullbtn" onclick="signUp()" id="signupBtn">Create Admin / Sign Up</button>
   <button class="btn ghost fullbtn" onclick="resetPassword()">Forgot Password?</button>
@@ -890,6 +890,55 @@ async function initCloud(){
  }
 }
 
+function passwordMeetsPolicy(value){
+ return typeof value==="string" && value.length>=12 &&
+  /[a-z]/.test(value) && /[A-Z]/.test(value) &&
+  /[0-9]/.test(value) && /[^A-Za-z0-9]/.test(value);
+}
+
+async function refreshTotpSettings(){
+ const status=$("totpStatus"),list=$("totpFactorList");
+ if(!sb||!user){if(status)status.textContent="Supabase login প্রয়োজন।";return;}
+ try{
+  const r=await sb.auth.mfa.listFactors();
+  if(r.error)throw r.error;
+  const verified=(r.data?.totp||[]).filter(x=>x.status==="verified");
+  if(status)status.textContent=verified.length?"TOTP MFA সক্রিয়। এই account-এর login-এ authenticator code লাগবে।":"TOTP MFA এখনো সক্রিয় নয়। নিচে setup করুন।";
+  if(list)list.textContent=verified.length?"সক্রিয় authenticator: "+verified.length:"কোনো verified authenticator নেই";
+ }catch(e){if(status)status.textContent="MFA status load হয়নি: "+(e.message||e);}
+}
+async function startTotpEnrollment(){
+ if(!sb||!user)return toast("প্রথমে Cloud account-এ Sign In করুন");
+ try{
+  const existing=await sb.auth.mfa.listFactors();if(existing.error)throw existing.error;
+  if((existing.data?.totp||[]).some(x=>x.status==="verified"))return toast("এই account-এ TOTP ইতিমধ্যে সক্রিয়।");
+  for(const factor of (existing.data?.totp||[]).filter(x=>x.status!=="verified"))await sb.auth.mfa.unenroll({factorId:factor.id});
+  const enrolled=await sb.auth.mfa.enroll({factorType:"totp",friendlyName:"CoachingOS Authenticator"});
+  if(enrolled.error)throw enrolled.error;
+  window.coachingOsPendingTotpFactor=enrolled.data.id;
+  $("totpQr").src=enrolled.data.totp.qr_code;
+  $("totpQrWrap").classList.remove("hidden");
+  $("totpVerifyCode").value="";
+  $("totpManualSecret").textContent=enrolled.data.totp.secret;
+  toast("Authenticator app দিয়ে QR scan করে ৬ সংখ্যার code লিখুন।");
+ }catch(e){toast("TOTP setup শুরু হয়নি: "+(e.message||e));}
+}
+async function verifyTotpEnrollment(){
+ const factorId=window.coachingOsPendingTotpFactor,code=$("totpVerifyCode")?.value.trim()||"";
+ if(!factorId)return toast("আগে TOTP setup শুরু করুন");
+ if(!/^\\d{6}$/.test(code))return toast("৬ সংখ্যার সঠিক authenticator code লিখুন");
+ const btn=$("totpVerifyBtn");if(btn)btn.disabled=true;
+ try{
+  const challenge=await sb.auth.mfa.challenge({factorId});if(challenge.error)throw challenge.error;
+  const verified=await sb.auth.mfa.verify({factorId,challengeId:challenge.data.id,code});if(verified.error)throw verified.error;
+  window.coachingOsPendingTotpFactor=null;
+  $("totpQrWrap").classList.add("hidden");
+  toast("TOTP MFA সক্রিয় হয়েছে। পরের login-এ authenticator code লাগবে।");
+  await refreshTotpSettings();
+ }catch(e){toast("Authenticator code verify হয়নি: "+(e.message||e));}
+ finally{if(btn)btn.disabled=false;}
+}
+
 /* Sign Up: existing email হলে ভুল success message দেখাবে না */
 async function signUp(){
  try{
@@ -900,8 +949,8 @@ async function signUp(){
    toast("সঠিক Email address লিখুন");
    return;
   }
-  if(password.length<6){
-   toast("Password কমপক্ষে ৬ অক্ষরের হতে হবে");
+  if(!passwordMeetsPolicy(password)){
+   toast("Password কমপক্ষে ১২ অক্ষরের হতে হবে এবং lowercase, uppercase, number ও symbol থাকতে হবে।");
    return;
   }
   if(!configured()){
@@ -1003,11 +1052,11 @@ function showRecoveryForm(){
  $("appView")?.classList.add("hidden");$("loginView")?.classList.remove("hidden");
  if($("recoveryForm"))return;
  const f=document.createElement("div");f.id="recoveryForm";
- f.innerHTML='<h3>নতুন Password সেট করুন</h3><div class="field"><label>New Password</label><input id="newPassword" type="password" minlength="6" autocomplete="new-password"></div><div class="field"><label>Confirm Password</label><input id="confirmPassword" type="password" minlength="6" autocomplete="new-password"></div><button class="btn fullbtn" onclick="updateRecoveredPassword()">Update Password</button>';
+ f.innerHTML='<h3>নতুন Password সেট করুন</h3><div class="field"><label>New Password</label><input id="newPassword" type="password" minlength="12" autocomplete="new-password"></div><div class="field"><label>Confirm Password</label><input id="confirmPassword" type="password" minlength="12" autocomplete="new-password"></div><button class="btn fullbtn" onclick="updateRecoveredPassword()">Update Password</button>';
  card.appendChild(f);
 }
 async function updateRecoveredPassword(){
- const p=$("newPassword")?.value||"",q=$("confirmPassword")?.value||"";if(p.length<6)return toast("Password কমপক্ষে ৬ অক্ষরের হতে হবে");if(p!==q)return toast("দুটি Password মিলছে না");
+ const p=$("newPassword")?.value||"",q=$("confirmPassword")?.value||"";if(!passwordMeetsPolicy(p))return toast("Password কমপক্ষে ১২ অক্ষরের হতে হবে এবং lowercase, uppercase, number ও symbol থাকতে হবে");if(p!==q)return toast("দুটি Password মিলছে না");
  try{const r=await sb.auth.updateUser({password:p});if(r.error)return toast(r.error.message);$("recoveryForm")?.remove();await sb.auth.signOut();toast("Password আপডেট হয়েছে। এখন Sign In করুন।");}catch(e){toast("Password update error: "+e.message);}
 }
 function canWrite(module=null){
@@ -1034,6 +1083,35 @@ async function afterAuth(){
   return toast("Login identity যাচাই করা যায়নি। আবার Sign In করুন।");
  }
  user=verifiedSession.data.user;
+ // If TOTP is enrolled, require the second factor before institute data loads.
+ try{
+  const aal=await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+  if(aal.error)throw aal.error;
+  if(aal.data?.nextLevel==="aal2" && aal.data?.currentLevel!=="aal2"){
+   const factors=await sb.auth.mfa.listFactors();
+   if(factors.error)throw factors.error;
+   const factor=(factors.data?.totp||[]).find(x=>x.status==="verified");
+   if(!factor)throw new Error("Verified TOTP factor পাওয়া যায়নি।");
+   const challenge=await sb.auth.mfa.challenge({factorId:factor.id});
+   if(challenge.error)throw challenge.error;
+   const code=window.prompt("Authenticator app থেকে ৬ সংখ্যার TOTP code লিখুন:");
+   if(!code || !/^\\d{6}$/.test(code)){
+    await sb.auth.signOut();user=null;
+    $("appView")?.classList.add("hidden");$("loginView")?.classList.remove("hidden");
+    loginFeedback("MFA verification সম্পন্ন হয়নি। আবার Sign In করুন।","error");
+    return;
+   }
+   const verified=await sb.auth.mfa.verify({factorId:factor.id,challengeId:challenge.data.id,code:code.trim()});
+   if(verified.error)throw verified.error;
+   const checked=await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+   if(checked.error || checked.data?.currentLevel!=="aal2")throw new Error("MFA assurance verification failed");
+  }
+ }catch(mfaError){
+  await sb.auth.signOut();user=null;portalMode=false;portalProfiles=[];
+  $("appView")?.classList.add("hidden");$("loginView")?.classList.remove("hidden");
+  loginFeedback("MFA verification failed: "+(mfaError?.message||"Unknown error"),"error");
+  return;
+ }
  const inviteUrl=new URL(window.location.href);
  const inviteToken=inviteUrl.searchParams.get("staff_invite");
  if(inviteToken){
@@ -2054,7 +2132,6 @@ function renderSettings(){
   <div><h1>${t("সেটিংস ও ব্যাকআপ","Settings & Backup")}</h1>
   <div class="muted">${t("প্রতিষ্ঠান ও ডেটা ব্যবস্থাপনা","Institute and data management")}</div></div>
  </div>
-
  <div class="panel" style="margin-bottom:14px">
   <h3>${t("সংযোগের অবস্থা","Connection Status")}</h3>
   <p>${cloud?"☁ Supabase Cloud":"Local browser storage"}</p>
@@ -2063,20 +2140,34 @@ function renderSettings(){
   <p class="smalltext">${t("লগইন ইমেইল","Login email")}: ${esc(user?.email||"Local user")}</p>
   <p class="smalltext">${t("ভূমিকা","Role")}: ${esc(activeRole)}</p>
  </div>
-
+ <div class="panel" style="margin-bottom:14px">
+  <h3>Two-Factor Authentication (TOTP)</h3>
+  <p class="muted">Authenticator app দিয়ে account-এ দ্বিতীয় নিরাপত্তা স্তর যোগ করুন। TOTP ব্যবহার Supabase-এ বিনামূল্যে।</p>
+  <p id="totpStatus" role="status">MFA status যাচাই হচ্ছে…</p>
+  <p id="totpFactorList" class="smalltext"></p>
+  <button class="btn secondary" type="button" onclick="startTotpEnrollment()">Set up Authenticator MFA</button>
+  <div id="totpQrWrap" class="hidden" style="margin-top:14px">
+   <p>Authenticator app দিয়ে QR code scan করুন:</p>
+   <img id="totpQr" alt="TOTP enrollment QR code" style="max-width:220px;background:#fff;padding:10px;border-radius:8px">
+   <p class="smalltext">QR scan না হলে manual setup key:</p>
+   <code id="totpManualSecret" style="display:block;overflow-wrap:anywhere"></code>
+   <div class="field"><label for="totpVerifyCode">৬ সংখ্যার authenticator code</label><input id="totpVerifyCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"></div>
+   <button class="btn" id="totpVerifyBtn" type="button" onclick="verifyTotpEnrollment()">Verify & Enable MFA</button>
+  </div>
+ </div>
  <div class="panel" style="margin-bottom:14px">
   <h3>${t("ডেটা ব্যাকআপ","Data Backup")}</h3>
-  <p class="muted">${t("প্রতিষ্ঠানের ডেটা JSON ফরম্যাটে Export করুন।","Export institute data as JSON.")}</p>
+  <p class="muted">${t("প্রতিষ্ঠানের ডেটা JSON ফরম্যাটে Export করুন。","Export institute data as JSON.")}</p>
   <button class="btn" onclick="downloadBackup()">Download JSON Backup</button>
   <button class="btn secondary" onclick="$('restoreFile').click()">Restore JSON Backup</button>
   <input id="restoreFile" type="file" accept=".json,application/json" class="hidden" onchange="restoreBackup(event)">
  </div>
-
  <div class="panel">
   <h3>${t("প্রতিষ্ঠান ব্যবস্থাপনা","Institute Management")}</h3>
   <p class="muted">${t("একই অ্যাকাউন্টে নতুন প্রতিষ্ঠান যোগ করতে পারবেন।","Add another institute to this account.")}</p>
   ${cloud?`<button class="btn secondary" onclick="addInstitute()">＋ Add Institute</button>`:""}
  </div>`;
+ refreshTotpSettings();
 }
 
 async function renderGuardianDelivery(){
