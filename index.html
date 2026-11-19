@@ -933,6 +933,9 @@ async function verifyTotpEnrollment(){
   const verified=await sb.auth.mfa.verify({factorId,challengeId:challenge.data.id,code});if(verified.error)throw verified.error;
   window.coachingOsPendingTotpFactor=null;
   $("totpQrWrap").classList.add("hidden");
+  $("totpManualSecret").textContent="";
+  $("totpQr").removeAttribute("src");
+  $("totpVerifyCode").value="";
   toast("TOTP MFA সক্রিয় হয়েছে। পরের login-এ authenticator code লাগবে।");
   await refreshTotpSettings();
  }catch(e){toast("Authenticator code verify হয়নি: "+(e.message||e));}
