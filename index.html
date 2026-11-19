@@ -1413,6 +1413,16 @@ function renderInAppFeeFollowups(){
  </div>`;
 }
 
+function renderInAppClassReminders(){
+ const today=new Date().toLocaleDateString("en-US",{weekday:"long"});
+ const classes=(rows.routine||[]).filter(x=>String(x.day||"").toLowerCase()===today.toLowerCase())
+  .sort((a,b)=>String(a.start_time||"").localeCompare(String(b.start_time||"")));
+ return `<div class="panel" style="margin-top:16px">
+  <div class="panel-head"><div><h3>📅 ${t("আজকের ক্লাস রিমাইন্ডার","Today's Class Reminders")}</h3><div class="smalltext">${t("আপনার রুটিনে সংরক্ষিত আজকের ক্লাসগুলো","Today's classes from your saved routine")}</div></div><button class="btn secondary small" onclick="go('routine')">${t("রুটিন দেখুন","View Routine")}</button></div>
+  ${classes.length?`<div class="table-wrap"><table><thead><tr><th>${t("সময়","Time")}</th><th>${t("ব্যাচ","Batch")}</th><th>${t("বিষয়","Subject")}</th><th>${t("শিক্ষক","Teacher")}</th><th>${t("কক্ষ","Room")}</th></tr></thead><tbody>${classes.map(x=>`<tr><td>${esc(x.start_time||"—")}${x.end_time?" – "+esc(x.end_time):""}</td><td>${esc(x.batch||"—")}</td><td>${esc(x.subject||"—")}</td><td>${esc(x.teacher||"—")}</td><td>${esc(x.room||"—")}</td></tr>`).join("")}</tbody></table></div>`: `<div class="empty">${t("আজকের দিনের জন্য কোনো ক্লাস রুটিন পাওয়া যায়নি।","No class routine is saved for today.")}</div>`}
+ </div>`;
+}
+
 function renderDashboard(){
  const students=rows.students||[];
  const active=students.filter(x=>!x.status||x.status==="Active").length;
@@ -1461,6 +1471,7 @@ function renderDashboard(){
  </div>
 
  ${renderInAppFeeFollowups()}
+ ${renderInAppClassReminders()}
 
  <div class="section-row">
   <div class="panel">
