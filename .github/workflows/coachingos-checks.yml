@@ -72,7 +72,7 @@ jobs:
           function loadFunction(name, context) {
             const start = source.indexOf('function ' + name + '(');
             assert.notEqual(start, -1, name + ' should exist');
-            const end = source.indexOf('\\n}\\n', start) + 2;
+            const end = source.indexOf('\n}\n', start) + 2;
             assert.ok(end > start, name + ' should have a closing brace');
             const code = source.slice(start, end);
             vm.runInNewContext(code, context);
