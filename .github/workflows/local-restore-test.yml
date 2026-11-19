@@ -37,8 +37,39 @@ jobs:
         run: |
           set -euo pipefail
           test -s supabase/schema.sql
-          mapfile -t source_migrations < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${#source_migrations[@]}" -eq 30
+          migration_order=(
+            20261117_multitenant_foundation.sql
+            20261117_platform_admin_controls.sql
+            20261117_platform_admin_overview.sql
+            20261117_staff_email_phone.sql
+            20261117_staff_management.sql
+            20261117_subscription_assignment.sql
+            20261118_student_parent_portal.sql
+            20261118_student_parent_portal_identity_guard.sql
+            20261118_parent_multi_child_student_single_profile.sql
+            20261118_portal_student_record_matching.sql
+            20261118_portal_relationship_exclusivity_fix.sql
+            20261118_portal_relationship_isolation_hardening.sql
+            20261118_staff_invitation_foundation.sql
+            20261118_staff_invitation_create_accept.sql
+            20261118_staff_audit_log.sql
+            20261118_staff_notification_center.sql
+            20261118_staff_notification_delete_fix.sql
+            20261118_notification_rpc_membership_scope.sql
+            20261118_guardian_sms_only_queue.sql
+            20261118_guardian_sms_retry_queue_foundation.sql
+            20261118_payroll_permissions.sql
+            20261118_subscription_write_and_limits.sql
+            20261118_coachingos_subscription_lifecycle_reconcile.sql
+            20261118_narrow_student_selector_rpc.sql
+            20261118_final_security_portal_reconciliation.sql
+            20261119063857_tighten_anon_table_access_disable_guardian_retry_rpc.sql
+            20261119074740_harden_authenticated_table_grants_and_active_audit_logs.sql
+            20261119075240_enforce_mfa_for_opted_in_users.sql
+            20261119131208_fix_mfa_rls_factor_permission.sql
+            20261119141103_harden_callable_security_definer_mfa.sql
+          )
+          test "${#migration_order[@]}" -eq 30
 
           mkdir -p restore-lab
           cd restore-lab
@@ -47,8 +78,9 @@ jobs:
           cp ../supabase/schema.sql supabase/migrations/20261116000000_coachingos_base_schema.sql
 
           declare -A sequence_by_day=()
-          for source in ../supabase/migrations/*.sql; do
-            filename="${source##*/}"
+          for filename in "${migration_order[@]}"; do
+            source="../supabase/migrations/$filename"
+            test -s "$source"
             day="${filename%%_*}"
             migration_name="${filename#*_}"
             if [[ "$day" =~ ^[0-9]{14}$ ]]; then
