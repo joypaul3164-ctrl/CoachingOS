@@ -56,6 +56,7 @@ jobs:
             20261118_staff_notification_center.sql
             20261118_staff_notification_delete_fix.sql
             20261118_notification_rpc_membership_scope.sql
+            20261118_guardian_attendance_delivery_outbox.sql
             20261118_guardian_sms_only_queue.sql
             20261118_guardian_sms_retry_queue_foundation.sql
             20261118_payroll_permissions.sql
@@ -69,7 +70,7 @@ jobs:
             20261119131208_fix_mfa_rls_factor_permission.sql
             20261119141103_harden_callable_security_definer_mfa.sql
           )
-          test "${#migration_order[@]}" -eq 30
+          test "${#migration_order[@]}" -eq 31
 
           mkdir -p restore-lab
           cd restore-lab
@@ -97,11 +98,11 @@ jobs:
           done
 
           count=$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l)
-          test "$count" -eq 31
+          test "$count" -eq 32
           versions=$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort | cut -d_ -f1)
           duplicates=$(printf '%s\n' "$versions" | sort | uniq -d)
           test -z "$duplicates"
-          echo "Prepared base schema plus 30 uniquely versioned migrations."
+          echo "Prepared base schema plus 31 uniquely versioned migrations."
 
       - name: Start isolated Supabase stack
         working-directory: restore-lab
