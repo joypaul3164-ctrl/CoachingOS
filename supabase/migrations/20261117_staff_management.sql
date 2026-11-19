@@ -89,14 +89,17 @@ on public.coachingos_records for delete
 to authenticated
 using (public.can_manage_coachingos_records(institute_id, record_type));
 
--- Return only the active institute's roster to its owner/admin/manager.
-create or replace function public.get_coachingos_institute_members(_institute_id uuid)
-returns table(user_id uuid, email text, role text, created_at timestamptz)
+-- Keep the roster RPC return shape aligned with staff_email_phone.sql.
+-- DROP is required because PostgreSQL cannot change TABLE OUT columns via
+-- CREATE OR REPLACE FUNCTION. The function remains scoped to institute managers.
+drop function if exists public.get_coachingos_institute_members(uuid);
+create function public.get_coachingos_institute_members(_institute_id uuid)
+returns table(user_id uuid, email text, phone text, role text, created_at timestamptz)
 language plpgsql
 stable
 security definer
 set search_path = ''
-as $$
+as $
 begin
   if not public.has_coachingos_institute_role(
     _institute_id, array['owner','admin','manager']::text[]
@@ -106,14 +109,14 @@ begin
   end if;
 
   return query
-    select m.user_id, u.email::text, m.role, m.created_at
+    select m.user_id, u.email::text, nullif(u.phone, '')::text, m.role, m.created_at
     from public.institute_members m
     join auth.users u on u.id = m.user_id
     where m.institute_id = _institute_id
     order by case m.role when 'owner' then 0 when 'admin' then 1 when 'manager' then 2 else 3 end,
              m.created_at;
 end;
-$$;
+$;
 
 create or replace function public.admin_add_coachingos_member(
   _institute_id uuid,
