@@ -62,6 +62,47 @@ jobs:
             echo "Checking $file"
             node --check "$file"
           done
+      - name: Test reminder sorting, totals, and day filtering
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const vm = require('node:vm');
+          const assert = require('node:assert/strict');
+          const source = fs.readFileSync('index.html', 'utf8');
+          function loadFunction(name, context) {
+            const start = source.indexOf('function ' + name + '(');
+            assert.notEqual(start, -1, name + ' should exist');
+            const end = source.indexOf('\\nfunction ', start + 1);
+            const code = source.slice(start, end === -1 ? source.length : end);
+            vm.runInNewContext(code, context);
+          }
+          const common = { t: (_bn, en) => en, statCard: () => '', money: n => String(n), esc: s => String(s), go: () => {} };
+          const feeContext = { ...common, rows: { fees: [
+            { student: 'Smaller Due', month: 'Nov', due: 20 },
+            { student: 'Largest Due', month: 'Nov', due: 90 },
+            { student: 'Already Paid', month: 'Nov', due: 0 }
+          ] } };
+          loadFunction('renderInAppFeeFollowups', feeContext);
+          const feeHtml = feeContext.renderInAppFeeFollowups();
+          assert.match(feeHtml, /Largest Due/);
+          assert.match(feeHtml, /Smaller Due/);
+          assert.doesNotMatch(feeHtml, /Already Paid/);
+          assert.ok(feeHtml.indexOf('Largest Due') < feeHtml.indexOf('Smaller Due'), 'fees should sort by highest due first');
+          assert.match(feeHtml, /110/, 'total due should be summed');
+          const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+          const classContext = { ...common, rows: { routine: [
+            { day: today, start_time: '11:00', batch: 'B', subject: 'Physics' },
+            { day: today, start_time: '09:00', batch: 'A', subject: 'Algebra' },
+            { day: 'Not-' + today, start_time: '08:00', batch: 'C', subject: 'Other Day' }
+          ] } };
+          loadFunction('renderInAppClassReminders', classContext);
+          const classHtml = classContext.renderInAppClassReminders();
+          assert.match(classHtml, /Algebra/);
+          assert.match(classHtml, /Physics/);
+          assert.doesNotMatch(classHtml, /Other Day/);
+          assert.ok(classHtml.indexOf('Algebra') < classHtml.indexOf('Physics'), 'classes should sort by start time');
+          console.log('Reminder behavior tests passed.');
+          NODE
       - name: Verify free in-app reminder hooks
         run: |
           python3 - <<'PY'
