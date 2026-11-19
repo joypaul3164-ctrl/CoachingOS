@@ -47,6 +47,11 @@ begin
 end;
 $function$;
 
+drop trigger if exists coachingos_guardian_attendance_delivery on public.coachingos_records;
+create trigger coachingos_guardian_attendance_delivery
+after insert or update of record_data on public.coachingos_records
+for each row execute function public.enqueue_guardian_attendance_delivery();
+
 create or replace function public.retry_coachingos_guardian_delivery(_log_id uuid)
 returns uuid language plpgsql security definer set search_path = ''
 as $function$
