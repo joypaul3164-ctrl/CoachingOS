@@ -1,0 +1,80 @@
+name: CoachingOS dashboard checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-and-feature-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Extract and syntax-check inline JavaScript
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+
+          class Scripts(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.inside = False
+                  self.external = False
+                  self.parts = []
+                  self.scripts = []
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower() == "script":
+                      self.inside = True
+                      self.external = any(k.lower() == "src" for k, _ in attrs)
+                      self.parts = []
+              def handle_data(self, data):
+                  if self.inside and not self.external:
+                      self.parts.append(data)
+              def handle_endtag(self, tag):
+                  if tag.lower() == "script" and self.inside:
+                      if not self.external and "".join(self.parts).strip():
+                          self.scripts.append("".join(self.parts))
+                      self.inside = False
+                      self.external = False
+                      self.parts = []
+
+          parser = Scripts()
+          parser.feed(Path("index.html").read_text(encoding="utf-8"))
+          if not parser.scripts:
+              raise SystemExit("No inline JavaScript blocks found")
+          out = Path("/tmp/coachingos-inline-js")
+          out.mkdir(exist_ok=True)
+          for i, source in enumerate(parser.scripts, 1):
+              (out / f"script-{i}.js").write_text(source, encoding="utf-8")
+          print(f"Extracted {len(parser.scripts)} inline JavaScript block(s)")
+          PY
+          for file in /tmp/coachingos-inline-js/*.js; do
+            echo "Checking $file"
+            node --check "$file"
+          done
+      - name: Verify free in-app reminder hooks
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("index.html").read_text(encoding="utf-8")
+          required = [
+              "function renderInAppFeeFollowups()",
+              "function renderInAppClassReminders()",
+              "renderInAppFeeFollowups()",
+              "renderInAppClassReminders()",
+          ]
+          missing = [item for item in required if item not in source]
+          if missing:
+              raise SystemExit("Missing reminder implementation: " + ", ".join(missing))
+          print("Both free in-app reminder functions and dashboard calls are present.")
+          PY
