@@ -72,8 +72,9 @@ jobs:
           function loadFunction(name, context) {
             const start = source.indexOf('function ' + name + '(');
             assert.notEqual(start, -1, name + ' should exist');
-            const end = source.indexOf('\\nfunction ', start + 1);
-            const code = source.slice(start, end === -1 ? source.length : end);
+            const end = source.indexOf('\\n}\\n', start) + 2;
+            assert.ok(end > start, name + ' should have a closing brace');
+            const code = source.slice(start, end);
             vm.runInNewContext(code, context);
           }
           const common = { t: (_bn, en) => en, statCard: () => '', money: n => String(n), esc: s => String(s), go: () => {} };
