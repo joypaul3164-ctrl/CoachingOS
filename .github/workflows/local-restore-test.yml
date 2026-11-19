@@ -7,6 +7,12 @@ on:
       - "supabase/schema.sql"
       - "supabase/migrations/**"
       - ".github/workflows/local-restore-test.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/schema.sql"
+      - "supabase/migrations/**"
+      - ".github/workflows/local-restore-test.yml"
   workflow_dispatch:
 
 permissions:
