@@ -77,7 +77,7 @@ jobs:
             const code = source.slice(start, end);
             vm.runInNewContext(code, context);
           }
-          const common = { t: (_bn, en) => en, statCard: () => '', money: n => String(n), esc: s => String(s), go: () => {} };
+          const common = { t: (_bn, en) => en, statCard: (_label, value) => String(value), money: n => String(n), esc: s => String(s), go: () => {} };
           const feeContext = { ...common, rows: { fees: [
             { student: 'Smaller Due', month: 'Nov', due: 20 },
             { student: 'Largest Due', month: 'Nov', due: 90 },
