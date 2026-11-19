@@ -926,7 +926,7 @@ async function startTotpEnrollment(){
 async function verifyTotpEnrollment(){
  const factorId=window.coachingOsPendingTotpFactor,code=$("totpVerifyCode")?.value.trim()||"";
  if(!factorId)return toast("আগে TOTP setup শুরু করুন");
- if(!/^\\d{6}$/.test(code))return toast("৬ সংখ্যার সঠিক authenticator code লিখুন");
+ if(!/^\d{6}$/.test(code))return toast("৬ সংখ্যার সঠিক authenticator code লিখুন");
  const btn=$("totpVerifyBtn");if(btn)btn.disabled=true;
  try{
   const challenge=await sb.auth.mfa.challenge({factorId});if(challenge.error)throw challenge.error;
@@ -1095,7 +1095,7 @@ async function afterAuth(){
    const challenge=await sb.auth.mfa.challenge({factorId:factor.id});
    if(challenge.error)throw challenge.error;
    const code=window.prompt("Authenticator app থেকে ৬ সংখ্যার TOTP code লিখুন:");
-   if(!code || !/^\\d{6}$/.test(code)){
+   if(!code || !/^\d{6}$/.test(code)){
     await sb.auth.signOut();user=null;
     $("appView")?.classList.add("hidden");$("loginView")?.classList.remove("hidden");
     loginFeedback("MFA verification সম্পন্ন হয়নি। আবার Sign In করুন।","error");
