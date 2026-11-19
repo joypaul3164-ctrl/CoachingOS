@@ -99,7 +99,7 @@ language plpgsql
 stable
 security definer
 set search_path = ''
-as $
+as $$
 begin
   if not public.has_coachingos_institute_role(
     _institute_id, array['owner','admin','manager']::text[]
@@ -116,7 +116,7 @@ begin
     order by case m.role when 'owner' then 0 when 'admin' then 1 when 'manager' then 2 else 3 end,
              m.created_at;
 end;
-$;
+$$;
 
 create or replace function public.admin_add_coachingos_member(
   _institute_id uuid,
