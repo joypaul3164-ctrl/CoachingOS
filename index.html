@@ -1393,6 +1393,36 @@ function editPlatformPlan(id,name,price,active){
  $("paPlanId").value=id;$("paPlanName").value=name;$("paPlanPrice").value=price;$("paPlanActive").checked=active;
  $("paPlanId").focus();
 }
+function renderInAppFeeFollowups(){
+ const outstanding=(rows.fees||[])
+  .filter(x=>Number(x.due||0)>0)
+  .sort((a,b)=>Number(b.due||0)-Number(a.due||0));
+ const total=outstanding.reduce((n,x)=>n+Number(x.due||0),0);
+ const preview=outstanding.slice(0,6);
+ return `<div class="panel" style="margin-top:16px">
+  <div class="panel-head">
+   <div><h3>🔔 ${t("বকেয়া ফি ফলো-আপ","Fee Due Follow-up")}</h3><div class="smalltext">${t("শুধু অ্যাপের ভেতরের রিমাইন্ডার — কোনো SMS পাঠানো হবে না","In-app only — no SMS will be sent")}</div></div>
+   <button class="btn secondary small" onclick="go('fees')">${t("ফি দেখুন","View Fees")}</button>
+  </div>
+  <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:12px">
+   ${statCard(t("বকেয়া ফি রেকর্ড","Outstanding Fee Records"),outstanding.length,t("যেসব ফিতে টাকা বাকি","Records with a remaining balance"),"◷")}
+   ${statCard(t("মোট বকেয়া","Total Outstanding"),money(total),t("সব বকেয়া ফি মিলিয়ে","Across all unpaid fee records"),"৳")}
+  </div>
+  ${preview.length?`<div class="table-wrap"><table><thead><tr><th>${t("শিক্ষার্থী","Student")}</th><th>${t("মাস","Month")}</th><th>${t("বকেয়া","Due")}</th></tr></thead><tbody>${preview.map(x=>`<tr><td>${esc(x.student||"—")}</td><td>${esc(x.month||"—")}</td><td><span class="tag red">৳${money(x.due)}</span></td></tr>`).join("")}</tbody></table></div>`: `<div class="empty">${t("চমৎকার! কোনো বকেয়া ফি পাওয়া যায়নি।","Great! No outstanding fees found.")}</div>`}
+  ${outstanding.length>preview.length?`<div class="smalltext" style="margin-top:9px">${t("আরও","And")} ${outstanding.length-preview.length} ${t("টি বকেয়া রেকর্ড ফি পৃষ্ঠায় আছে।","more outstanding records are available on the Fees page.")}</div>`:""}
+ </div>`;
+}
+
+function renderInAppClassReminders(){
+ const today=new Date().toLocaleDateString("en-US",{weekday:"long"});
+ const classes=(rows.routine||[]).filter(x=>String(x.day||"").toLowerCase()===today.toLowerCase())
+  .sort((a,b)=>String(a.start_time||"").localeCompare(String(b.start_time||"")));
+ return `<div class="panel" style="margin-top:16px">
+  <div class="panel-head"><div><h3>📅 ${t("আজকের ক্লাস রিমাইন্ডার","Today's Class Reminders")}</h3><div class="smalltext">${t("আপনার রুটিনে সংরক্ষিত আজকের ক্লাসগুলো","Today's classes from your saved routine")}</div></div><button class="btn secondary small" onclick="go('routine')">${t("রুটিন দেখুন","View Routine")}</button></div>
+  ${classes.length?`<div class="table-wrap"><table><thead><tr><th>${t("সময়","Time")}</th><th>${t("ব্যাচ","Batch")}</th><th>${t("বিষয়","Subject")}</th><th>${t("শিক্ষক","Teacher")}</th><th>${t("কক্ষ","Room")}</th></tr></thead><tbody>${classes.map(x=>`<tr><td>${esc(x.start_time||"—")}${x.end_time?" – "+esc(x.end_time):""}</td><td>${esc(x.batch||"—")}</td><td>${esc(x.subject||"—")}</td><td>${esc(x.teacher||"—")}</td><td>${esc(x.room||"—")}</td></tr>`).join("")}</tbody></table></div>`: `<div class="empty">${t("আজকের দিনের জন্য কোনো ক্লাস রুটিন পাওয়া যায়নি।","No class routine is saved for today.")}</div>`}
+ </div>`;
+}
+
 function renderDashboard(){
  const students=rows.students||[];
  const active=students.filter(x=>!x.status||x.status==="Active").length;
@@ -1439,6 +1469,9 @@ function renderDashboard(){
   ${statCard(t("মোট আদায়","Fees Collected"),money(paid),t("বেতন ও পেমেন্ট","Fees and payments"),"৳")}
   ${statCard(t("মোট বকেয়া","Total Due"),money(due),t("অনাদায়ী ফি","Unpaid fees"),"◷")}
  </div>
+
+ ${renderInAppFeeFollowups()}
+ ${renderInAppClassReminders()}
 
  <div class="section-row">
   <div class="panel">
