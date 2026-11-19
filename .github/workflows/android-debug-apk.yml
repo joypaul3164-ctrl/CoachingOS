@@ -11,6 +11,16 @@ on:
       - "assets/**"
       - "manifest.webmanifest"
       - "sw.js"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - "capacitor.config.json"
+      - ".github/workflows/android-debug-apk.yml"
+      - "assets/**"
+      - "manifest.webmanifest"
+      - "sw.js"
   workflow_dispatch:
 
 permissions:
