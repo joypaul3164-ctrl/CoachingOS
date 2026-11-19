@@ -5,10 +5,22 @@ on:
     branches:
       - main
     paths:
-      - "Chochings"
+      - "index.html"
       - "capacitor.config.json"
       - ".github/workflows/android-debug-apk.yml"
       - "assets/**"
+      - "manifest.webmanifest"
+      - "sw.js"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - "capacitor.config.json"
+      - ".github/workflows/android-debug-apk.yml"
+      - "assets/**"
+      - "manifest.webmanifest"
+      - "sw.js"
   workflow_dispatch:
 
 permissions:
@@ -47,7 +59,7 @@ jobs:
       - name: Prepare local web app bundle
         run: |
           mkdir -p www/assets
-          cp Chochings www/index.html
+          cp index.html www/index.html
           cp assets/coachingos-icon.svg www/assets/coachingos-icon.svg
           cp manifest.webmanifest www/manifest.webmanifest
           cp sw.js www/sw.js

@@ -1,0 +1,155 @@
+name: CoachingOS schema restore test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/schema.sql"
+      - "supabase/migrations/**"
+      - ".github/workflows/local-restore-test.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/schema.sql"
+      - "supabase/migrations/**"
+      - ".github/workflows/local-restore-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    name: Restore current schema and migrations in isolated Supabase
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out current source
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v3
+        with:
+          version: v2.stable
+
+      - name: Build ordered migration set
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s supabase/schema.sql
+          migration_order=(
+            20261117_multitenant_foundation.sql
+            20261117_platform_admin_controls.sql
+            20261117_platform_admin_overview.sql
+            20261117_staff_email_phone.sql
+            20261117_staff_management.sql
+            20261117_subscription_assignment.sql
+            20261118_student_parent_portal.sql
+            20261118_student_parent_portal_identity_guard.sql
+            20261118_parent_multi_child_student_single_profile.sql
+            20261118_portal_student_record_matching.sql
+            20261118_portal_relationship_exclusivity_fix.sql
+            20261118_portal_relationship_isolation_hardening.sql
+            20261118_staff_invitation_foundation.sql
+            20261118_staff_invitation_create_accept.sql
+            20261118_staff_audit_log.sql
+            20261118_staff_notification_center.sql
+            20261118_staff_notification_delete_fix.sql
+            20261118_notification_rpc_membership_scope.sql
+            20261118_guardian_attendance_delivery_outbox.sql
+            20261118_guardian_sms_only_queue.sql
+            20261118_guardian_sms_retry_queue_foundation.sql
+            20261118_payroll_permissions.sql
+            20261118_subscription_write_and_limits.sql
+            20261118_coachingos_subscription_lifecycle_reconcile.sql
+            20261118_narrow_student_selector_rpc.sql
+            20261118_final_security_portal_reconciliation.sql
+            20261119063857_tighten_anon_table_access_disable_guardian_retry_rpc.sql
+            20261119074740_harden_authenticated_table_grants_and_active_audit_logs.sql
+            20261119075240_enforce_mfa_for_opted_in_users.sql
+            20261119131208_fix_mfa_rls_factor_permission.sql
+            20261119141103_harden_callable_security_definer_mfa.sql
+          )
+          test "${#migration_order[@]}" -eq 31
+
+          mkdir -p restore-lab
+          cd restore-lab
+          supabase init
+          mkdir -p supabase/migrations
+          cp ../supabase/schema.sql supabase/migrations/20261116000000_coachingos_base_schema.sql
+
+          declare -A sequence_by_day=()
+          for filename in "${migration_order[@]}"; do
+            source="../supabase/migrations/$filename"
+            test -s "$source"
+            day="${filename%%_*}"
+            migration_name="${filename#*_}"
+            if [[ "$day" =~ ^[0-9]{14}$ ]]; then
+              version="$day"
+            elif [[ "$day" =~ ^[0-9]{8}$ ]]; then
+              sequence=$(( ${sequence_by_day[$day]:-0} + 1 ))
+              sequence_by_day[$day]=$sequence
+              version="${day}$(printf '%06d' "$sequence")"
+            else
+              echo "Unexpected migration filename: $filename"
+              exit 1
+            fi
+            cp "$source" "supabase/migrations/${version}_${migration_name}"
+          done
+
+          count=$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l)
+          test "$count" -eq 32
+          versions=$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort | cut -d_ -f1)
+          duplicates=$(printf '%s\n' "$versions" | sort | uniq -d)
+          test -z "$duplicates"
+          echo "Prepared base schema plus 31 uniquely versioned migrations."
+
+      - name: Start isolated Supabase stack
+        working-directory: restore-lab
+        run: supabase start
+
+      - name: Apply all migrations from a clean database
+        working-directory: restore-lab
+        run: supabase db reset --local
+
+      - name: Verify restored schema and security controls
+        working-directory: restore-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          export PGPASSWORD=postgres
+          DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+
+          TABLES=$(psql "$DB_URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'")
+          RLS_TABLES=$(psql "$DB_URL" -Atc "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and c.relrowsecurity")
+          MFA_POLICIES=$(psql "$DB_URL" -Atc "select count(*) from pg_policies where schemaname='public' and policyname='coachingos_mfa_optin_aal2'")
+          MFA_GUARDED_RPCS=$(psql "$DB_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef and has_function_privilege('authenticated',p.oid,'EXECUTE') and pg_get_functiondef(p.oid) like '%coachingos_private.mfa_access_allowed()%'")
+          ROSTER_RESULT=$(psql "$DB_URL" -Atc "select pg_get_function_result('public.get_coachingos_institute_members(uuid)'::regprocedure)")
+
+          echo "Public tables: $TABLES"
+          echo "RLS-enabled tables: $RLS_TABLES"
+          echo "MFA restrictive policies: $MFA_POLICIES"
+          echo "MFA-guarded callable SECURITY DEFINER RPCs: $MFA_GUARDED_RPCS"
+          echo "Staff roster result: $ROSTER_RESULT"
+
+          test "$TABLES" -eq 12
+          test "$RLS_TABLES" -eq 12
+          test "$MFA_POLICIES" -eq 12
+          test "$MFA_GUARDED_RPCS" -eq 28
+          [[ "$ROSTER_RESULT" == *"phone text"* ]]
+
+          for table in institutes institute_members coachingos_records; do
+            exists=$(psql "$DB_URL" -Atc "select to_regclass('public.$table') is not null")
+            test "$exists" = "t"
+            rls=$(psql "$DB_URL" -Atc "select relrowsecurity from pg_class where oid='public.$table'::regclass")
+            test "$rls" = "t"
+          done
+
+          echo "Clean schema restore and core security checks passed."
+
+      - name: Stop disposable Supabase stack
+        if: always()
+        working-directory: restore-lab
+        run: supabase stop --no-backup
